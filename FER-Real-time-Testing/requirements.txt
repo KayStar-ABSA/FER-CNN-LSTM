@@ -1,0 +1,21 @@
+# Core dependencies for real-time emotion detection
+opencv-python>=4.5.5.64
+deepface>=0.0.75
+tf-keras>=0.1.0
+
+# Additional dependencies for the emotion detection scripts
+matplotlib>=3.5.0
+numpy>=1.21.0
+pandas>=1.3.0
+
+# Face detection dependencies
+mtcnn>=0.1.1
+retina-face>=0.0.13
+
+# TensorFlow and Keras
+tensorflow>=2.8.0
+keras>=2.8.0
+
+# Utilities
+requests>=2.27.1
+Pillow>=8.0.0
