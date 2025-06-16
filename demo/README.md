@@ -26,7 +26,7 @@ Dự án này triển khai hệ thống nhận diện cảm xúc khuôn mặt th
    - Sử dụng lệnh:
      ```bash
      python -m pip install --upgrade pip
-     pip install -r FER-Real-time-Testing/requirements.txt
+     pip install -r demo/requirements.txt
      ```
    - Hoặc cài đặt từng thư viện:
      ```bash
@@ -40,7 +40,7 @@ Dự án này triển khai hệ thống nhận diện cảm xúc khuôn mặt th
 1. **Chạy chương trình nhận diện cảm xúc real-time:**
    - Mở terminal/cmd và chuyển vào thư mục này:
      ```bash
-     cd FER-Real-time-Testing
+     cd demo
      ```
    - Chạy file Python:
      ```bash
