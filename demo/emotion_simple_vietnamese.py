@@ -73,9 +73,14 @@ def update_chart(frame):
             engagement_over_time[time_step][1] += 1 if engagement == 'Tích cực' else 0
             engagement_over_time[time_step][2] += 1 if engagement == 'Không tích cực' else 0
 
-            # Vẽ hình chữ nhật xung quanh khuôn mặt và gắn nhãn với cảm xúc dự đoán
+            # Vẽ hình chữ nhật xung quanh khuôn mặt
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.putText(frame, f'{emotion_vn} ({emotions[emotion]:.2f}%)', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            
+            # Hiển thị cảm xúc bằng tiếng Việt (sử dụng cv2.putText với font Unicode)
+            emotion_text = f'{emotion_vn} ({emotions[emotion]:.2f}%)'
+            cv2.putText(frame, emotion_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            
+            # Hiển thị mức độ tham gia bằng tiếng Việt
             cv2.putText(frame, engagement, (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
             # Hiển thị phần trăm cảm xúc ở bên cạnh bằng tiếng Việt
@@ -131,4 +136,4 @@ def update_chart(frame):
 ani = FuncAnimation(fig, update_chart, interval=100)
 
 # Hiển thị biểu đồ
-plt.show()
+plt.show() 

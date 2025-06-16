@@ -5,6 +5,8 @@ from matplotlib.animation import FuncAnimation
 from collections import defaultdict
 import numpy as np
 from emotion_translations import translate_emotion, get_engagement_vietnamese
+from PIL import Image, ImageDraw, ImageFont
+import os
 
 # Khởi tạo bộ đếm cho mỗi trạng thái tham gia
 engaged_count = 0
@@ -23,6 +25,40 @@ cap = cv2.VideoCapture(0)
 
 # Thiết lập hình và biểu đồ cột
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+def put_vietnamese_text(img, text, position, font_size=32, color=(255, 255, 255)):
+    """Hàm để vẽ text tiếng Việt lên ảnh"""
+    try:
+        # Chuyển đổi BGR sang RGB
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(img_rgb)
+        
+        # Tạo font với kích thước phù hợp
+        try:
+            # Thử sử dụng font Arial Unicode MS nếu có
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            try:
+                # Thử sử dụng font mặc định của hệ thống
+                font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", font_size)
+            except:
+                # Sử dụng font mặc định
+                font = ImageFont.load_default()
+        
+        # Tạo draw object
+        draw = ImageDraw.Draw(pil_img)
+        
+        # Vẽ text
+        draw.text(position, text, font=font, fill=color)
+        
+        # Chuyển đổi lại sang BGR
+        img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        return img_bgr
+    except Exception as e:
+        print(f"Lỗi khi vẽ text tiếng Việt: {e}")
+        # Fallback: sử dụng cv2.putText với tiếng Anh
+        cv2.putText(img, text, position, cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+        return img
 
 # Hàm cập nhật biểu đồ
 def update_chart(frame):
@@ -73,23 +109,28 @@ def update_chart(frame):
             engagement_over_time[time_step][1] += 1 if engagement == 'Tích cực' else 0
             engagement_over_time[time_step][2] += 1 if engagement == 'Không tích cực' else 0
 
-            # Vẽ hình chữ nhật xung quanh khuôn mặt và gắn nhãn với cảm xúc dự đoán
+            # Vẽ hình chữ nhật xung quanh khuôn mặt
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.putText(frame, f'{emotion_vn} ({emotions[emotion]:.2f}%)', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-            cv2.putText(frame, engagement, (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+            
+            # Hiển thị cảm xúc bằng tiếng Việt
+            emotion_text = f'{emotion_vn} ({emotions[emotion]:.2f}%)'
+            frame = put_vietnamese_text(frame, emotion_text, (x, y - 10), 24, (0, 0, 255))
+            
+            # Hiển thị mức độ tham gia bằng tiếng Việt
+            frame = put_vietnamese_text(frame, engagement, (x, y - 40), 24, (255, 0, 0))
 
             # Hiển thị phần trăm cảm xúc ở bên cạnh bằng tiếng Việt
             y0, dy = 30, 30
             for i, (emo, perc) in enumerate(emotions.items()):
                 emo_vn = translate_emotion(emo)
                 text = f'{emo_vn}: {perc:.2f}%'
-                cv2.putText(frame, text, (10, y0 + i * dy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                frame = put_vietnamese_text(frame, text, (10, y0 + i * dy), 16, (0, 255, 0))
         except Exception as e:
             print(f"Error processing face: {e}")
             continue
 
     # Hiển thị khung hình kết quả
-    cv2.imshow('Phát hiện cảm xúc thời gian thực', frame)
+    cv2.imshow('thuanpt', frame)
 
     # Cập nhật biểu đồ mỗi giây (gần đúng)
     if time_step % 10 == 0:
@@ -131,4 +172,4 @@ def update_chart(frame):
 ani = FuncAnimation(fig, update_chart, interval=100)
 
 # Hiển thị biểu đồ
-plt.show()
+plt.show() 
