@@ -1,2 +1,0 @@
-const { hasPermission, requestPermission } = useCameraPermission()
-
