@@ -7,7 +7,7 @@ import json
 import csv
 from keras.models import model_from_json
 from keras.preprocessing.image import img_to_array
-from emotion_translations import translate_emotion, get_engagement_vietnamese
+from utils.emotion_translations import translate_emotion, get_engagement_vietnamese
 from PIL import Image, ImageDraw, ImageFont
 import os
 

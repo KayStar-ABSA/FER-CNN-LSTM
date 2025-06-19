@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify
 from keras.models import model_from_json
 from keras.preprocessing.image import img_to_array
 import cv2
-from emotion_translations import translate_emotion, get_engagement_vietnamese
+from utils.emotion_translations import translate_emotion, get_engagement_vietnamese
 
 # Đường dẫn model (giả định copy từ demo sang api hoặc dùng đường dẫn tuyệt đối)
 MODEL_JSON = '../demo/facial_expression_model_structure.json'
