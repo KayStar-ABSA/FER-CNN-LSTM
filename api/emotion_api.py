@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 from keras.models import model_from_json
 from keras.preprocessing.image import img_to_array
 import cv2
+from emotion_translations import translate_emotion, get_engagement_vietnamese
 
 # Đường dẫn model (giả định copy từ demo sang api hoặc dùng đường dẫn tuyệt đối)
 MODEL_JSON = '../demo/facial_expression_model_structure.json'
@@ -71,10 +72,14 @@ def predict():
         face_img = img[y:y+h, x:x+w]
         emotions, dominant_emotion = predict_emotion(face_img)
         if emotions is not None:
+            emotion_vn = translate_emotion(dominant_emotion)
+            engagement_vn = get_engagement_vietnamese(dominant_emotion, emotions[dominant_emotion])
             results.append({
                 'box': [int(x), int(y), int(w), int(h)],
                 'dominant_emotion': dominant_emotion,
-                'emotions': emotions
+                'emotions': emotions,
+                'emotion_vn': emotion_vn,
+                'engagement_vn': engagement_vn
             })
     return jsonify({'faces': results})
 

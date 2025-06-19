@@ -1,8 +1,7 @@
-import React, { useRef, useState } from 'react';
-import { StyleSheet, TouchableOpacity, ActivityIndicator, Alert, View, Dimensions, Text, Platform } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useState, useRef } from 'react';
+import { StyleSheet, TouchableOpacity, ActivityIndicator, Alert, View, Dimensions, Text } from 'react-native';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -34,67 +33,39 @@ export default function CameraTab() {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [cameraType, setCameraType] = useState<'front' | 'back'>('front');
-  const cameraRef = useRef<any>(null);
-  const intervalRef = useRef<number | null>(null);
+  const [cameraType, setCameraType] = useState<CameraType>('front');
   const [imageSize, setImageSize] = useState<{width: number, height: number} | null>(null);
+  const [lastPhoto, setLastPhoto] = useState<any>(null);
+  const intervalRef = useRef<number | null>(null);
+  const cameraViewRef = useRef<any>(null);
 
   // Bắt đầu sử dụng: xin quyền và bật camera
   const handleStart = async () => {
-    console.log('Bắt đầu xin quyền camera...');
     if (!permission?.granted) {
       const perm = await requestPermission();
       if (!perm.granted) {
         Alert.alert('Không có quyền truy cập camera');
-        console.log('Không có quyền truy cập camera');
         return;
       }
     }
-    console.log('Đã có quyền camera, bật camera');
     setIsCameraActive(true);
     setResult(null);
     setProcessing(false);
-    // Gửi frame mỗi 1 giây, chỉ gửi khi không processing
     if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = window.setInterval(() => {
-      console.log('Interval tick: processing =', processing);
-      if (!processing) {
-        if (!cameraRef.current) {
-          console.log('Interval tick: cameraRef.current vẫn null, không thể chụp');
-          return;
-        }
-        console.log('Interval tick: chuẩn bị chụp và gửi frame');
-        captureAndSendFrame();
-      } else {
-        console.log('Interval tick: đang processing, bỏ qua');
-      }
-    }, 1000);
-    console.log('Đã start interval gửi frame mỗi 1 giây');
+    // Không có takePictureAsync, nên phải chụp thủ công bằng nút hoặc snapshot API nếu có
   };
 
   // Dừng camera
   const handleStop = () => {
     setIsCameraActive(false);
     if (intervalRef.current) clearInterval(intervalRef.current);
-    console.log('Đã dừng camera và clear interval');
   };
 
-  // Cắt frame và gửi API
-  const captureAndSendFrame = async () => {
-    if (!cameraRef.current) {
-      console.log('cameraRef.current không tồn tại, không thể chụp ảnh');
-      return;
-    }
+  // Hàm gửi ảnh lên API
+  const sendPhotoToAPI = async (photo: any) => {
+    if (!photo || !photo.uri) return;
     try {
       setProcessing(true);
-      console.log('Đang chụp ảnh...');
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
-      if (!photo || !photo.uri) {
-        console.log('Không chụp được ảnh');
-        setProcessing(false);
-        return;
-      }
-      // Lưu lại kích thước ảnh để scale box
       if (photo.width && photo.height) setImageSize({ width: photo.width, height: photo.height });
       const formData = new FormData();
       formData.append('image', {
@@ -102,7 +73,6 @@ export default function CameraTab() {
         name: 'frame.jpg',
         type: 'image/jpeg',
       } as any);
-      console.log('Đang gửi ảnh tới API...');
       const res = await fetch('http://192.168.1.224:5000/predict', {
         method: 'POST',
         body: formData,
@@ -111,46 +81,24 @@ export default function CameraTab() {
         },
       });
       if (!res.ok) {
-        const errText = await res.text();
-        console.log('API trả về lỗi:', errText);
         setResult(null);
         setProcessing(false);
         return;
       }
       const data = await res.json();
-      console.log('Kết quả nhận được từ API:', data);
       setResult(data);
     } catch (e) {
-      console.log('Lỗi gửi ảnh:', e);
       setProcessing(false);
     } finally {
       setProcessing(false);
     }
   };
 
-  // CameraView ref: dùng callback ref để đảm bảo luôn đúng
-  const setCameraRef = (ref: any) => {
-    cameraRef.current = ref;
-    if (ref) {
-      console.log('CameraView đã mount, ref đã set');
-    } else {
-      console.log('CameraView unmount hoặc ref null');
-    }
+  // Sự kiện khi chụp ảnh xong (CameraView mới)
+  const handleMediaCaptured = (media: any) => {
+    setLastPhoto(media);
+    sendPhotoToAPI(media);
   };
-
-  // Clear interval khi unmount hoặc tắt camera
-  React.useEffect(() => {
-    if (!isCameraActive && intervalRef.current) {
-      clearInterval(intervalRef.current);
-      console.log('useEffect: clear interval do camera tắt');
-    }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        console.log('useEffect cleanup: clear interval');
-      }
-    };
-  }, [isCameraActive]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -172,10 +120,11 @@ export default function CameraTab() {
       {isCameraActive && (
         <View style={styles.cameraContainer}>
           <CameraView
-            ref={setCameraRef}
+            ref={cameraViewRef}
             style={styles.camera}
             facing={cameraType}
-            ratio="16:9"
+            enableTorch={false}
+            mode="picture"
           />
           {/* Overlay bounding box và cảm xúc */}
           <View style={styles.overlay} pointerEvents="box-none">
@@ -193,7 +142,8 @@ export default function CameraTab() {
                 <View key={idx} style={[styles.faceBox, { left: x, top: y, width: w, height: h }]}> 
                   <View style={styles.faceBoxRect} />
                   <View style={styles.faceBoxLabel}>
-                    <Text style={styles.faceBoxLabelText}>{face.dominant_emotion}</Text>
+                    <Text style={styles.faceBoxLabelText}>{face.emotion_vn}</Text>
+                    <Text style={styles.faceBoxEngagement}>{face.engagement_vn}</Text>
                   </View>
                   <View style={styles.faceBoxEmotions}>
                     {face.emotions && Object.entries(face.emotions).map(([emo, perc]) => (
@@ -208,7 +158,8 @@ export default function CameraTab() {
               <View style={styles.noFaceBox}><Text style={styles.noFaceText}>Không phát hiện khuôn mặt</Text></View>
             )}
             {processing && <ActivityIndicator style={styles.loading} />}
-            <TouchableOpacity style={styles.stopButtonLower} onPress={handleStop}>
+            {/* Nút dừng */}
+            <TouchableOpacity style={[styles.stopButtonLower]} onPress={handleStop}>
               <MaterialIcons name="stop-circle" size={36} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -423,18 +374,26 @@ const styles = StyleSheet.create({
   },
   faceBoxLabel: {
     position: 'absolute',
-    top: -28,
+    top: -38,
     left: 0,
     backgroundColor: '#FF3B30',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 2,
     zIndex: 51,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   faceBoxLabelText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  faceBoxEngagement: {
+    color: '#fff',
+    fontWeight: '500',
+    fontSize: 13,
+    marginTop: 2,
   },
   faceBoxEmotions: {
     position: 'absolute',
