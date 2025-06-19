@@ -205,7 +205,7 @@ def update_chart(frame):
             continue
 
     # Hiển thị khung hình kết quả
-    cv2.imshow('Phát hiện cảm xúc thời gian thực (Local Model)', frame)
+    cv2.imshow('Real-time emotion detection (Local Model)', frame)
 
     # Cập nhật biểu đồ mỗi giây (gần đúng)
     if time_step % 10 == 0:
