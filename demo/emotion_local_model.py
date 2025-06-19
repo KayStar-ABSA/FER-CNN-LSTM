@@ -1,15 +1,15 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import defaultdict
-import json
 import csv
 from keras.models import model_from_json
-from keras.preprocessing.image import img_to_array
 from utils.emotion_translations import translate_emotion, get_engagement_vietnamese
 from PIL import Image, ImageDraw, ImageFont
-import os
 
 # Khởi tạo bộ đếm cho mỗi trạng thái tham gia
 engaged_count = 0
