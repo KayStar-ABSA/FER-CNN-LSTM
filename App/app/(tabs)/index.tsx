@@ -19,6 +19,11 @@ export default function App() {
   const faceDetectionOptions = useRef<FaceDetectionOptions>({
     performanceMode: "accurate",
     minFaceSize: 0.3,
+    classificationMode: "all",
+    landmarkMode: "all",
+    contourMode: "all",
+    trackingEnabled: true,
+    cameraFacing: "front",
   }).current;
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front");
