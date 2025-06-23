@@ -59,6 +59,11 @@ App/
 - [Tài liệu React Native](https://reactnative.dev/docs/getting-started)
 - [Hướng dẫn expo-router](https://expo.github.io/router/docs)
 
+## Build App
+- npm install -g eas-cli (chạy nếu chưa cài eas-cli)
+- eas build:configure (cần có 1 tài khoản [expo.dev](https://expo.dev/))
+- yarn build:android
+
 ---
 
 *Liên hệ hoặc đóng góp: vui lòng tạo issue hoặc pull request trên repository này.*
