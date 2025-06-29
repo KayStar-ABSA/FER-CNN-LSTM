@@ -23,6 +23,10 @@ interface AnalysisResult {
   faces_detected: number;
   results: EmotionResult[];
   success: boolean;
+  processing_time?: number;
+  avg_fps?: number;
+  image_size?: string;
+  cache_hits?: number;
 }
 
 interface EmotionAnalysisResultProps {
@@ -32,9 +36,9 @@ interface EmotionAnalysisResultProps {
 const EmotionAnalysisResult: React.FC<EmotionAnalysisResultProps> = ({ result }) => {
   if (!result) {
     return (
-      <Card style={{ textAlign: 'center', backgroundColor: '#fafafa' }}>
+      <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
         <Text type="secondary">Chưa có kết quả phân tích</Text>
-      </Card>
+      </div>
     );
   }
 
@@ -73,60 +77,56 @@ const EmotionAnalysisResult: React.FC<EmotionAnalysisResultProps> = ({ result })
   };
 
   return (
-    <div>
-      <Title level={4}>Kết quả phân tích</Title>
-      
-      <div style={{ marginBottom: 16 }}>
-        <Text strong>Số khuôn mặt phát hiện: </Text>
-        <Tag color="blue" style={{ fontSize: 16, padding: '4px 12px' }}>
+    <div style={{ fontSize: '12px' }}>
+      <div style={{ marginBottom: 8 }}>
+        <Text strong>Khuôn mặt: </Text>
+        <Tag color="blue">
           {result.faces_detected}
         </Tag>
       </div>
       
       {result.results.map((faceResult, index) => (
-        <Card 
+        <div 
           key={index} 
           style={{ 
-            marginBottom: 16, 
+            marginBottom: 12, 
+            padding: '8px',
             border: '1px solid #f0f0f0',
-            borderRadius: 8
+            borderRadius: 4,
+            backgroundColor: '#fafafa'
           }}
         >
-          <div style={{ marginBottom: 16 }}>
-            <Title level={5} style={{ margin: 0 }}>
-              Khuôn mặt {index + 1}
-            </Title>
+          <div style={{ marginBottom: 8 }}>
+            <Text strong style={{ fontSize: '11px' }}>Khuôn mặt {index + 1}</Text>
           </div>
           
-          <Row gutter={16}>
+          <Row gutter={8}>
             <Col span={12}>
-              <div style={{ marginBottom: 12 }}>
-                <Text strong>Cảm xúc chủ đạo: </Text>
+              <div style={{ marginBottom: 6 }}>
+                <Text style={{ fontSize: '10px' }}>Cảm xúc chủ đạo:</Text>
                 <br />
                 <Tag 
                   color="green" 
                   style={{ 
-                    fontSize: 14, 
-                    padding: '8px 12px',
-                    marginTop: 4,
-                    borderRadius: 6
+                    fontSize: '10px', 
+                    padding: '2px 6px',
+                    marginTop: 2
                   }}
                 >
-                  {faceResult.dominant_emotion_vn} ({faceResult.dominant_emotion_score.toFixed(1)}%)
+                  {faceResult.dominant_emotion_vn} ({faceResult.dominant_emotion_score.toFixed(0)}%)
                 </Tag>
               </div>
 
-              <div style={{ marginBottom: 12 }}>
-                <Text strong>Mức độ tham gia: </Text>
+              <div style={{ marginBottom: 6 }}>
+                <Text style={{ fontSize: '10px' }}>Mức độ tham gia:</Text>
                 <br />
                 <Tag 
                   color={getEngagementColor(faceResult.engagement)} 
                   icon={getEngagementIcon(faceResult.engagement)}
                   style={{ 
-                    fontSize: 14, 
-                    padding: '8px 12px',
-                    marginTop: 4,
-                    borderRadius: 6
+                    fontSize: '10px', 
+                    padding: '2px 6px',
+                    marginTop: 2
                   }}
                 >
                   {faceResult.engagement}
@@ -136,16 +136,17 @@ const EmotionAnalysisResult: React.FC<EmotionAnalysisResultProps> = ({ result })
             
             <Col span={12}>
               <div>
-                <Text strong>Chi tiết cảm xúc:</Text>
-                <div style={{ marginTop: 8 }}>
+                <Text style={{ fontSize: '10px' }}>Chi tiết cảm xúc:</Text>
+                <div style={{ marginTop: 4 }}>
                   {Object.entries(faceResult.emotions_vn)
                     .sort(([,a], [,b]) => b - a) // Sắp xếp theo điểm số giảm dần
+                    .slice(0, 3) // Chỉ hiển thị 3 cảm xúc cao nhất
                     .map(([emotion, score]) => (
-                      <div key={emotion} style={{ marginBottom: 8 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <Text style={{ fontSize: 12 }}>{emotion}:</Text>
-                          <Text style={{ fontSize: 12, fontWeight: 'bold' }}>
-                            {score.toFixed(1)}%
+                      <div key={emotion} style={{ marginBottom: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                          <Text style={{ fontSize: '9px' }}>{emotion}:</Text>
+                          <Text style={{ fontSize: '9px', fontWeight: 'bold' }}>
+                            {score.toFixed(0)}%
                           </Text>
                         </div>
                         <Progress 
@@ -153,7 +154,7 @@ const EmotionAnalysisResult: React.FC<EmotionAnalysisResultProps> = ({ result })
                           size="small" 
                           strokeColor={getEmotionColor(emotion, emotion === faceResult.dominant_emotion_vn)}
                           showInfo={false}
-                          style={{ marginBottom: 4 }}
+                          style={{ marginBottom: 2 }}
                         />
                       </div>
                     ))}
@@ -162,13 +163,10 @@ const EmotionAnalysisResult: React.FC<EmotionAnalysisResultProps> = ({ result })
             </Col>
           </Row>
           
-          <Divider style={{ margin: '12px 0' }} />
-          
-          <div style={{ fontSize: 12, color: '#666' }}>
-            <Text>Vị trí: ({faceResult.face_position.x}, {faceResult.face_position.y}) - 
-                  Kích thước: {faceResult.face_position.width}×{faceResult.face_position.height}</Text>
+          <div style={{ fontSize: '9px', color: '#666', marginTop: 4 }}>
+            <Text>Vị trí: ({faceResult.face_position.x}, {faceResult.face_position.y})</Text>
           </div>
-        </Card>
+        </div>
       ))}
     </div>
   );

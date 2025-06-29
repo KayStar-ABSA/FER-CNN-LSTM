@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Card, Typography, Button, Space, Spin, message, Row, Col, Progress } from 'antd';
-import { CameraOutlined, PlayCircleOutlined, StopOutlined, VideoCameraOutlined, DatabaseOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Card, Typography, Button, Space, Spin, message, Row, Col, Progress, Statistic } from 'antd';
+import { CameraOutlined, PlayCircleOutlined, StopOutlined, VideoCameraOutlined, DatabaseOutlined, ExclamationCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { analyzeEmotion } from '../utils/api';
 import EmotionAnalysisResult from '../components/EmotionAnalysisResult';
 
@@ -26,6 +26,10 @@ interface AnalysisResult {
   results: EmotionResult[];
   success: boolean;
   session_id?: number;
+  processing_time?: number;
+  avg_fps?: number;
+  image_size?: string;
+  cache_hits?: number;
 }
 
 const CameraPage: React.FC = () => {
@@ -41,16 +45,22 @@ const CameraPage: React.FC = () => {
   const [totalAnalysisCount, setTotalAnalysisCount] = useState(0);
   const [detectionRate, setDetectionRate] = useState(0);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
-  const [cameraResolution, setCameraResolution] = useState<string>('1280x720');
+  const [cameraResolution, setCameraResolution] = useState<string>('640x480');
+  const [performanceStats, setPerformanceStats] = useState({
+    avgProcessingTime: 0,
+    avgFPS: 0,
+    totalProcessingTime: 0
+  });
 
   const startCamera = async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: 'user'
+            width: { ideal: 640 },  // Giảm độ phân giải để tăng tốc
+            height: { ideal: 480 },
+            facingMode: 'user',
+            frameRate: { ideal: 30 }  // Giới hạn FPS
           } 
         });
         if (videoRef.current) {
@@ -82,6 +92,11 @@ const CameraPage: React.FC = () => {
     setTotalAnalysisCount(0);
     setDetectionRate(0);
     setCurrentSessionId(null);
+    setPerformanceStats({
+      avgProcessingTime: 0,
+      avgFPS: 0,
+      totalProcessingTime: 0
+    });
   };
 
   const stopStreaming = () => {
@@ -101,7 +116,7 @@ const CameraPage: React.FC = () => {
     setIsStreaming(true);
     const interval = setInterval(() => {
       captureFrame();
-    }, 1500); // Phân tích mỗi 1.5 giây để tăng tần suất
+    }, 800); // Giảm xuống 800ms (1.25 FPS) để tăng tần suất phân tích
     setStreamInterval(interval);
   };
 
@@ -111,17 +126,26 @@ const CameraPage: React.FC = () => {
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
     
-    ctx.drawImage(videoRef.current, 0, 0, 1280, 720);
-    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9); // Tăng chất lượng ảnh
+    // Giảm kích thước canvas để tăng tốc độ xử lý
+    const canvasWidth = 640;
+    const canvasHeight = 480;
+    
+    ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
+    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8); // Giảm chất lượng ảnh để tăng tốc
     
     try {
+      const startTime = performance.now();
+      
       const data = await analyzeEmotion({ 
         image: dataUrl,
-        save_to_db: true, // Luôn lưu vào database
+        save_to_db: true,
         session_id: currentSessionId,
         camera_resolution: cameraResolution,
-        analysis_interval: 1.5
+        analysis_interval: 0.8
       });
+      
+      const endTime = performance.now();
+      const processingTime = endTime - startTime;
       
       // Cập nhật session_id nếu có
       if (data.session_id && !currentSessionId) {
@@ -131,12 +155,27 @@ const CameraPage: React.FC = () => {
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       
+      // Cập nhật thống kê hiệu suất từ backend response
+      if (data.processing_time || data.avg_fps) {
+        setPerformanceStats(prev => {
+          const newTotalTime = prev.totalProcessingTime + (data.processing_time || processingTime);
+          const newAvgTime = newTotalTime / (totalAnalysisCount + 1);
+          const newAvgFPS = data.avg_fps || (1000 / newAvgTime);
+          
+          return {
+            avgProcessingTime: data.processing_time || newAvgTime,
+            avgFPS: newAvgFPS,
+            totalProcessingTime: newTotalTime
+          };
+        });
+      }
+      
       // Đếm số kết quả đã lưu
       if (data.faces_detected > 0) {
         setSavedCount(prev => prev + data.faces_detected);
         // Hiển thị thông báo thỉnh thoảng
         if (Math.random() < 0.05) { // 5% chance
-          message.success(`Phát hiện ${data.faces_detected} khuôn mặt!`, 1);
+          message.success(`Phát hiện ${data.faces_detected} khuôn mặt! (${data.processing_time}ms)`, 1);
         }
       } else {
         setNoFaceCount(prev => prev + 1);
@@ -166,18 +205,27 @@ const CameraPage: React.FC = () => {
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
     
-    ctx.drawImage(videoRef.current, 0, 0, 1280, 720);
-    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
+    // Giảm kích thước canvas
+    const canvasWidth = 640;
+    const canvasHeight = 480;
+    
+    ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
+    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8);
     
     setLoading(true);
     try {
+      const startTime = performance.now();
+      
       const data = await analyzeEmotion({ 
         image: dataUrl,
-        save_to_db: true, // Luôn lưu vào database
+        save_to_db: true,
         session_id: currentSessionId,
         camera_resolution: cameraResolution,
-        analysis_interval: null // Không phải stream
+        analysis_interval: null
       });
+      
+      const endTime = performance.now();
+      const processingTime = endTime - startTime;
       
       // Cập nhật session_id nếu có
       if (data.session_id && !currentSessionId) {
@@ -187,8 +235,23 @@ const CameraPage: React.FC = () => {
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       
+      // Cập nhật thống kê hiệu suất từ backend response
+      if (data.processing_time || data.avg_fps) {
+        setPerformanceStats(prev => {
+          const newTotalTime = prev.totalProcessingTime + (data.processing_time || processingTime);
+          const newAvgTime = newTotalTime / (totalAnalysisCount + 1);
+          const newAvgFPS = data.avg_fps || (1000 / newAvgTime);
+          
+          return {
+            avgProcessingTime: data.processing_time || newAvgTime,
+            avgFPS: newAvgFPS,
+            totalProcessingTime: newTotalTime
+          };
+        });
+      }
+      
       if (data.faces_detected > 0) {
-        message.success(`Phát hiện ${data.faces_detected} khuôn mặt và đã lưu vào database!`);
+        message.success(`Phát hiện ${data.faces_detected} khuôn mặt và đã lưu vào database! (${data.processing_time || processingTime.toFixed(0)}ms)`);
         setSavedCount(prev => prev + data.faces_detected);
       } else {
         message.warning('Không phát hiện khuôn mặt. Hãy đảm bảo khuôn mặt rõ ràng và đủ ánh sáng.');
@@ -201,188 +264,217 @@ const CameraPage: React.FC = () => {
       setDetectionRate((detected / total) * 100);
       
     } catch (error: any) {
-      message.error(error.message || 'Lỗi khi phân tích');
-      setTotalAnalysisCount(prev => prev + 1);
+      console.error('Analysis error:', error);
+      message.error('Lỗi khi phân tích ảnh');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    return () => {
-      stopStreaming();
-      stopCamera();
-    };
-  }, []);
-
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px' }}>
-      <Card style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)', borderRadius: 12 }}>
-        <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
-          Phân tích cảm xúc qua camera
-        </Title>
-        
-        <Row gutter={24}>
-          <Col span={12}>
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <video 
-                ref={videoRef} 
-                width={640} 
-                height={480} 
-                autoPlay 
+    <div style={{ padding: '16px', height: '100vh', overflow: 'hidden' }}>
+      <Title level={3} style={{ marginBottom: '12px' }}>
+        <CameraOutlined /> Camera Analysis
+      </Title>
+      
+      {/* Performance Statistics - Compact */}
+      <Row gutter={8} style={{ marginBottom: '12px' }}>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center' }}>
+            <Statistic
+              title="Tốc độ xử lý"
+              value={analysisResult?.avg_fps || performanceStats.avgFPS}
+              suffix="FPS"
+              prefix={<ThunderboltOutlined style={{ color: '#52c41a' }} />}
+              precision={1}
+              valueStyle={{ fontSize: '16px' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center' }}>
+            <Statistic
+              title="Thời gian xử lý"
+              value={analysisResult?.processing_time || performanceStats.avgProcessingTime}
+              suffix="ms"
+              precision={0}
+              valueStyle={{ fontSize: '16px' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center' }}>
+            <Statistic
+              title="Tỷ lệ phát hiện"
+              value={detectionRate}
+              suffix="%"
+              precision={1}
+              valueStyle={{ fontSize: '16px' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center' }}>
+            <Statistic
+              title="Độ phân giải"
+              value={analysisResult?.image_size || cameraResolution}
+              valueStyle={{ fontSize: '14px' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{ height: 'calc(100vh - 140px)' }}>
+        <Col span={14}>
+          <Card title="Camera Feed" size="small" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ position: 'relative', display: 'inline-block', flex: 1 }}>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
                 style={{ 
-                  borderRadius: 8, 
-                  border: '2px solid #f0f0f0',
-                  backgroundColor: '#f5f5f5',
-                  maxWidth: '100%'
-                }} 
+                  width: '100%', 
+                  maxWidth: '100%',
+                  height: 'auto',
+                  maxHeight: 'calc(100vh - 280px)',
+                  border: '2px solid #d9d9d9',
+                  borderRadius: '8px'
+                }}
               />
+              <canvas
+                ref={canvasRef}
+                style={{ display: 'none' }}
+                width="640"
+                height="480"
+              />
+              
+              {/* Performance overlay */}
+              {analysisResult && (
+                <div style={{
+                  position: 'absolute',
+                  top: '10px',
+                  left: '10px',
+                  background: 'rgba(0,0,0,0.8)',
+                  color: 'white',
+                  padding: '6px 10px',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontFamily: 'monospace'
+                }}>
+                  <div> {analysisResult.avg_fps || performanceStats.avgFPS.toFixed(1)} FPS</div>
+                  <div> {analysisResult.processing_time || performanceStats.avgProcessingTime.toFixed(0)}ms</div>
+                  <div> Cache: {analysisResult.cache_hits || 0}</div>
+                </div>
+              )}
             </div>
             
-            <Space direction="vertical" size="middle" style={{ width: '100%', alignItems: 'center' }}>
-              {/* Thống kê phiên hiện tại */}
-              <div style={{ 
-                background: '#f6ffed', 
-                border: '1px solid #b7eb8f', 
-                borderRadius: 6, 
-                padding: '12px',
-                width: '100%',
-                textAlign: 'center'
-              }}>
-                <div style={{ marginBottom: 8 }}>
-                  <Text type="success">
-                    <DatabaseOutlined /> Đã lưu {savedCount} kết quả trong phiên này
-                  </Text>
-                </div>
-                
-                {/* Tỷ lệ phát hiện khuôn mặt */}
-                <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary">
-                    Tỷ lệ phát hiện: {detectionRate.toFixed(1)}% ({totalAnalysisCount - noFaceCount}/{totalAnalysisCount})
-                  </Text>
-                  <Progress 
-                    percent={detectionRate} 
-                    size="small" 
-                    status={detectionRate < 50 ? 'exception' : detectionRate < 80 ? 'active' : 'success'}
-                    style={{ marginTop: 4 }}
-                  />
-                </div>
-                
-                {/* Gợi ý cải thiện */}
-                {detectionRate < 70 && totalAnalysisCount > 5 && (
-                  <div style={{ 
-                    background: '#fff7e6', 
-                    border: '1px solid #ffd591', 
-                    borderRadius: 4, 
-                    padding: '8px',
-                    marginTop: 8
-                  }}>
-                    <Text type="warning">
-                      <ExclamationCircleOutlined /> Gợi ý: Đảm bảo khuôn mặt rõ ràng, đủ ánh sáng và nhìn thẳng camera
-                    </Text>
-                  </div>
-                )}
-                
-                {savedCount > 0 && (
-                  <Button 
-                    size="small" 
-                    type="text" 
-                    onClick={() => {
-                      setSavedCount(0);
-                      setNoFaceCount(0);
-                      setTotalAnalysisCount(0);
-                      setDetectionRate(0);
-                    }}
-                    style={{ color: '#52c41a', marginTop: 8 }}
-                  >
-                    Reset thống kê
-                  </Button>
-                )}
-              </div>
-              
-              <Space wrap>
-                {!isCameraOn ? (
-                  <Button 
-                    type="primary" 
-                    icon={<PlayCircleOutlined />} 
-                    onClick={startCamera}
-                    size="large"
-                  >
-                    Bật camera
-                  </Button>
-                ) : (
-                  <Button 
-                    danger 
-                    icon={<StopOutlined />} 
-                    onClick={stopCamera}
-                    size="large"
-                  >
-                    Tắt camera
-                  </Button>
-                )}
-                
-                <Button 
-                  type="primary" 
-                  icon={<CameraOutlined />} 
-                  onClick={capture} 
-                  loading={loading}
-                  disabled={!isCameraOn}
-                  size="large"
-                >
-                  Chụp & Phân tích
-                </Button>
-
-                {isCameraOn && !isStreaming ? (
-                  <Button 
-                    type="default" 
-                    icon={<VideoCameraOutlined />} 
-                    onClick={startStreaming}
-                    size="large"
-                  >
-                    Bật stream
-                  </Button>
-                ) : (
-                  <Button 
-                    danger 
-                    icon={<StopOutlined />} 
-                    onClick={stopStreaming}
-                    disabled={!isStreaming}
-                    size="large"
-                  >
-                    Tắt stream
-                  </Button>
-                )}
-              </Space>
-              
-              {loading && (
-                <div style={{ textAlign: 'center' }}>
-                  <Spin size="large" />
-                  <div style={{ marginTop: 8 }}>
-                    <Text type="secondary">Đang phân tích...</Text>
-                  </div>
-                </div>
-              )}
-
-              {isStreaming && (
-                <div style={{ textAlign: 'center' }}>
-                  <Spin size="small" />
-                  <div style={{ marginTop: 8 }}>
-                    <Text type="secondary">
-                      Đang phân tích real-time và lưu vào database...
-                    </Text>
-                  </div>
-                </div>
-              )}
+            <Space style={{ marginTop: '8px', flexWrap: 'wrap' }}>
+              <Button
+                type="primary"
+                size="small"
+                icon={<CameraOutlined />}
+                onClick={startCamera}
+                disabled={isCameraOn}
+              >
+                Bật Camera
+              </Button>
+              <Button
+                danger
+                size="small"
+                icon={<StopOutlined />}
+                onClick={stopCamera}
+                disabled={!isCameraOn}
+              >
+                Tắt Camera
+              </Button>
+              <Button
+                type="default"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={capture}
+                loading={loading}
+                disabled={!isCameraOn}
+              >
+                Chụp Ảnh
+              </Button>
+              <Button
+                type="default"
+                size="small"
+                icon={<VideoCameraOutlined />}
+                onClick={startStreaming}
+                disabled={!isCameraOn || isStreaming}
+              >
+                Stream (0.8s)
+              </Button>
+              <Button
+                danger
+                size="small"
+                icon={<StopOutlined />}
+                onClick={stopStreaming}
+                disabled={!isStreaming}
+              >
+                Dừng
+              </Button>
             </Space>
-          </Col>
+          </Card>
+        </Col>
 
-          <Col span={12}>
-            <EmotionAnalysisResult result={analysisResult} />
-          </Col>
-        </Row>
-        
-        <canvas ref={canvasRef} width={1280} height={720} style={{ display: 'none' }} />
-      </Card>
+        <Col span={10}>
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Statistics - Compact */}
+            <Card title="Thống kê" size="small" style={{ flex: 1 }}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Row justify="space-between">
+                  <Text strong>Khuôn mặt đã lưu:</Text>
+                  <Text>{savedCount}</Text>
+                </Row>
+                <Row justify="space-between">
+                  <Text strong>Lần phân tích:</Text>
+                  <Text>{totalAnalysisCount}</Text>
+                </Row>
+                <Row justify="space-between">
+                  <Text strong>Không phát hiện:</Text>
+                  <Text>{noFaceCount}</Text>
+                </Row>
+                <Progress
+                  percent={detectionRate}
+                  status={detectionRate > 80 ? 'success' : detectionRate > 50 ? 'normal' : 'exception'}
+                  format={(percent) => `${percent?.toFixed(1)}%`}
+                  size="small"
+                />
+              </Space>
+            </Card>
+
+            {/* Session Info - Compact */}
+            {currentSessionId && (
+              <Card title="Phiên làm việc" size="small" style={{ flex: 1 }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Row justify="space-between">
+                    <Text strong>Session ID:</Text>
+                    <Text code>{currentSessionId}</Text>
+                  </Row>
+                  <Row justify="space-between">
+                    <Text strong>Trạng thái:</Text>
+                    <Text style={{ color: isStreaming ? '#52c41a' : '#faad14' }}>
+                      {isStreaming ? '🟢 Đang stream' : '🟡 Sẵn sàng'}
+                    </Text>
+                  </Row>
+                </Space>
+              </Card>
+            )}
+
+            {/* Analysis Results - Compact */}
+            {analysisResult && (
+              <Card title="Kết quả phân tích" size="small" style={{ flex: 2 }}>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  <EmotionAnalysisResult result={analysisResult} />
+                </div>
+              </Card>
+            )}
+          </div>
+        </Col>
+      </Row>
     </div>
   );
 };
