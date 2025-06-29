@@ -19,3 +19,4 @@ python-multipart
 opencv-python>=4.5.5.64
 tensorflow>=2.8.0
 keras>=2.8.0
+python-dotenv
