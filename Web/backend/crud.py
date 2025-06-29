@@ -25,7 +25,8 @@ def create_emotion_result(db: Session, user_id: int, emotion: str, score: float 
                          engagement: str = None, emotions_scores: dict = None, 
                          emotions_scores_vn: dict = None, image_quality: float = None,
                          face_position: dict = None, analysis_duration: float = None,
-                         confidence_level: float = None):
+                         confidence_level: float = None,
+                         processing_time: float = None, avg_fps: float = None, image_size: str = None, cache_hits: int = None):
     """Tạo kết quả phân tích cảm xúc với thông tin chi tiết"""
     db_result = models.EmotionResult(
         user_id=user_id,
@@ -41,7 +42,11 @@ def create_emotion_result(db: Session, user_id: int, emotion: str, score: float 
         image_quality=image_quality,
         face_position=face_position,
         analysis_duration=analysis_duration,
-        confidence_level=confidence_level
+        confidence_level=confidence_level,
+        processing_time=processing_time,
+        avg_fps=avg_fps,
+        image_size=image_size,
+        cache_hits=cache_hits
     )
     db.add(db_result)
     db.commit()
@@ -64,7 +69,9 @@ def create_analysis_session(db: Session, user_id: int, camera_resolution: str = 
 def update_analysis_session(db: Session, session_id: int, total_analyses: int = None,
                            successful_detections: int = None, failed_detections: int = None,
                            detection_rate: float = None, emotions_summary: dict = None,
-                           average_engagement: float = None, session_end: datetime = None):
+                           average_engagement: float = None, session_end: datetime = None,
+                           avg_processing_time: float = None, avg_fps: float = None,
+                           total_cache_hits: int = None, cache_hit_rate: float = None):
     """Cập nhật thống kê phiên phân tích"""
     db_session = db.query(models.AnalysisSession).filter(models.AnalysisSession.id == session_id).first()
     if db_session:
@@ -82,6 +89,14 @@ def update_analysis_session(db: Session, session_id: int, total_analyses: int = 
             db_session.average_engagement = average_engagement
         if session_end is not None:
             db_session.session_end = session_end
+        if avg_processing_time is not None:
+            db_session.avg_processing_time = avg_processing_time
+        if avg_fps is not None:
+            db_session.avg_fps = avg_fps
+        if total_cache_hits is not None:
+            db_session.total_cache_hits = total_cache_hits
+        if cache_hit_rate is not None:
+            db_session.cache_hit_rate = cache_hit_rate
         
         db.commit()
         db.refresh(db_session)

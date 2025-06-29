@@ -252,6 +252,26 @@ def analyze_emotion(data: dict, current_user: models.User = Depends(auth.get_cur
         if not result.get("success", False):
             raise HTTPException(status_code=500, detail=result.get("error", "Analysis failed"))
         
+        # Lưu thống kê hiệu suất vào PerformanceStats
+        if save_to_db:
+            # Tính tỷ lệ phát hiện
+            detection_rate = 100.0 if result["faces_detected"] > 0 else 0.0
+            
+            # Lưu performance stats
+            performance_stats = models.PerformanceStats(
+                user_id=current_user.id,
+                session_id=session_id,
+                processing_time=result.get("processing_time", analysis_duration),
+                avg_fps=result.get("avg_fps"),
+                detection_rate=detection_rate,
+                cache_hits=result.get("cache_hits", 0),
+                image_size=result.get("image_size"),
+                camera_resolution=camera_resolution,
+                analysis_interval=analysis_interval
+            )
+            db.add(performance_stats)
+            db.commit()
+        
         # Lưu kết quả vào database nếu có kết quả và được yêu cầu lưu
         if save_to_db and result["results"]:
             for face_result in result["results"]:
@@ -273,7 +293,12 @@ def analyze_emotion(data: dict, current_user: models.User = Depends(auth.get_cur
                     image_quality=image_quality,
                     face_position=face_result.get("face_position"),
                     analysis_duration=analysis_duration,
-                    confidence_level=face_result["dominant_emotion_score"]
+                    confidence_level=face_result["dominant_emotion_score"],
+                    # Thêm thống kê hiệu suất
+                    processing_time=result.get("processing_time", analysis_duration),
+                    avg_fps=result.get("avg_fps"),
+                    image_size=result.get("image_size"),
+                    cache_hits=result.get("cache_hits", 0)
                 )
         elif save_to_db:
             # Lưu kết quả thất bại (không phát hiện khuôn mặt)
@@ -284,7 +309,12 @@ def analyze_emotion(data: dict, current_user: models.User = Depends(auth.get_cur
                 score=0.0,
                 faces_detected=0,
                 analysis_duration=analysis_duration,
-                confidence_level=0.0
+                confidence_level=0.0,
+                # Thêm thống kê hiệu suất
+                processing_time=result.get("processing_time", analysis_duration),
+                avg_fps=result.get("avg_fps"),
+                image_size=result.get("image_size"),
+                cache_hits=result.get("cache_hits", 0)
             )
         
         # Cập nhật session với thống kê mới
@@ -301,7 +331,12 @@ def analyze_emotion(data: dict, current_user: models.User = Depends(auth.get_cur
                     failed_detections=session_stats['failed_detections'] + (1 if result["faces_detected"] == 0 else 0),
                     detection_rate=((session_stats['successful_detections'] + (1 if result["faces_detected"] > 0 else 0)) / (session_stats['total_analyses'] + 1)) * 100,
                     emotions_summary=crud.get_session_emotions_summary(db, session_id),
-                    average_engagement=crud.get_session_average_engagement(db, session_id)
+                    average_engagement=crud.get_session_average_engagement(db, session_id),
+                    # Cập nhật thống kê hiệu suất
+                    avg_processing_time=result.get("processing_time", analysis_duration),
+                    avg_fps=result.get("avg_fps"),
+                    total_cache_hits=session_stats.get('total_cache_hits', 0) + result.get("cache_hits", 0),
+                    cache_hit_rate=((session_stats.get('total_cache_hits', 0) + result.get("cache_hits", 0)) / (session_stats['total_analyses'] + 1)) * 100
                 )
         
         # Thêm session_id vào response
@@ -343,4 +378,136 @@ def analyze_emotion_stream(data: dict, current_user: models.User = Depends(auth.
         
     except Exception as e:
         print(f"Error in analyze_emotion_stream: {e}")
-        return {"error": str(e), "success": False} 
+        return {"error": str(e), "success": False}
+
+@app.get("/performance-stats/{period}")
+def get_performance_stats(period: str, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(database.get_db)):
+    """Lấy thống kê hiệu suất của user"""
+    from datetime import datetime, timedelta
+    
+    # Tính thời gian bắt đầu dựa trên period
+    now = datetime.utcnow()
+    if period == "day":
+        start_time = now - timedelta(days=1)
+    elif period == "week":
+        start_time = now - timedelta(weeks=1)
+    elif period == "month":
+        start_time = now - timedelta(days=30)
+    else:
+        start_time = now - timedelta(days=7)  # Default to week
+    
+    # Lấy thống kê hiệu suất
+    stats = db.query(models.PerformanceStats).filter(
+        models.PerformanceStats.user_id == current_user.id,
+        models.PerformanceStats.timestamp >= start_time
+    ).all()
+    
+    if not stats:
+        return {
+            "avg_processing_time": 0,
+            "avg_fps": 0,
+            "avg_detection_rate": 0,
+            "total_cache_hits": 0,
+            "avg_cache_hit_rate": 0,
+            "total_analyses": 0
+        }
+    
+    # Tính toán thống kê
+    total_analyses = len(stats)
+    avg_processing_time = sum(s.processing_time for s in stats if s.processing_time) / total_analyses
+    avg_fps = sum(s.avg_fps for s in stats if s.avg_fps) / total_analyses
+    avg_detection_rate = sum(s.detection_rate for s in stats if s.detection_rate) / total_analyses
+    total_cache_hits = sum(s.cache_hits for s in stats if s.cache_hits)
+    avg_cache_hit_rate = (total_cache_hits / total_analyses) * 100 if total_analyses > 0 else 0
+    
+    return {
+        "avg_processing_time": round(avg_processing_time, 2),
+        "avg_fps": round(avg_fps, 1),
+        "avg_detection_rate": round(avg_detection_rate, 1),
+        "total_cache_hits": total_cache_hits,
+        "avg_cache_hit_rate": round(avg_cache_hit_rate, 1),
+        "total_analyses": total_analyses
+    }
+
+@app.get("/admin/performance-stats/{period}")
+def get_admin_performance_stats(period: str, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(database.get_db)):
+    """Admin lấy thống kê hiệu suất tổng hợp"""
+    from datetime import datetime, timedelta
+    
+    # Tính thời gian bắt đầu dựa trên period
+    now = datetime.utcnow()
+    if period == "day":
+        start_time = now - timedelta(days=1)
+    elif period == "week":
+        start_time = now - timedelta(weeks=1)
+    elif period == "month":
+        start_time = now - timedelta(days=30)
+    else:
+        start_time = now - timedelta(days=7)  # Default to week
+    
+    # Lấy thống kê hiệu suất của tất cả users
+    stats = db.query(models.PerformanceStats).filter(
+        models.PerformanceStats.timestamp >= start_time
+    ).all()
+    
+    if not stats:
+        return {
+            "avg_processing_time": 0,
+            "avg_fps": 0,
+            "avg_detection_rate": 0,
+            "total_cache_hits": 0,
+            "avg_cache_hit_rate": 0,
+            "total_analyses": 0,
+            "user_stats": []
+        }
+    
+    # Tính toán thống kê tổng hợp
+    total_analyses = len(stats)
+    avg_processing_time = sum(s.processing_time for s in stats if s.processing_time) / total_analyses
+    avg_fps = sum(s.avg_fps for s in stats if s.avg_fps) / total_analyses
+    avg_detection_rate = sum(s.detection_rate for s in stats if s.detection_rate) / total_analyses
+    total_cache_hits = sum(s.cache_hits for s in stats if s.cache_hits)
+    avg_cache_hit_rate = (total_cache_hits / total_analyses) * 100 if total_analyses > 0 else 0
+    
+    # Thống kê theo user
+    user_stats = {}
+    for stat in stats:
+        if stat.user_id not in user_stats:
+            user_stats[stat.user_id] = {
+                "user_id": stat.user_id,
+                "analyses": 0,
+                "total_processing_time": 0,
+                "total_fps": 0,
+                "total_detection_rate": 0,
+                "total_cache_hits": 0
+            }
+        
+        user_stats[stat.user_id]["analyses"] += 1
+        user_stats[stat.user_id]["total_processing_time"] += stat.processing_time or 0
+        user_stats[stat.user_id]["total_fps"] += stat.avg_fps or 0
+        user_stats[stat.user_id]["total_detection_rate"] += stat.detection_rate or 0
+        user_stats[stat.user_id]["total_cache_hits"] += stat.cache_hits or 0
+    
+    # Tính trung bình cho mỗi user
+    user_stats_list = []
+    for user_id, user_stat in user_stats.items():
+        analyses = user_stat["analyses"]
+        user_stats_list.append({
+            "user_id": user_id,
+            "avg_processing_time": round(user_stat["total_processing_time"] / analyses, 2),
+            "avg_fps": round(user_stat["total_fps"] / analyses, 1),
+            "avg_detection_rate": round(user_stat["total_detection_rate"] / analyses, 1),
+            "total_cache_hits": user_stat["total_cache_hits"],
+            "avg_cache_hit_rate": round((user_stat["total_cache_hits"] / analyses) * 100, 1),
+            "total_analyses": analyses
+        })
+    
+    return {
+        "avg_processing_time": round(avg_processing_time, 2),
+        "avg_fps": round(avg_fps, 1),
+        "avg_detection_rate": round(avg_detection_rate, 1),
+        "total_cache_hits": total_cache_hits,
+        "avg_cache_hit_rate": round(avg_cache_hit_rate, 1),
+        "total_analyses": total_analyses,
+        "user_stats": user_stats_list
+    } 

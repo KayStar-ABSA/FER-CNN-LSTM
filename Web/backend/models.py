@@ -39,6 +39,12 @@ class EmotionResult(database.Base):
     analysis_duration = Column(Float, nullable=True)  # Thời gian phân tích (ms)
     confidence_level = Column(Float, nullable=True)  # Độ tin cậy tổng thể
     
+    # Thống kê hiệu suất mới
+    processing_time = Column(Float, nullable=True)  # Thời gian xử lý (ms)
+    avg_fps = Column(Float, nullable=True)  # FPS trung bình
+    image_size = Column(String, nullable=True)  # Kích thước ảnh "640x480"
+    cache_hits = Column(Integer, nullable=True)  # Số lần cache hit
+    
     user = relationship("User", back_populates="emotion_results")
 
 class AnalysisSession(database.Base):
@@ -62,4 +68,31 @@ class AnalysisSession(database.Base):
     camera_resolution = Column(String, nullable=True)  # "1280x720"
     analysis_interval = Column(Float, nullable=True)  # Khoảng thời gian giữa các phân tích (giây)
     
-    user = relationship("User") 
+    # Thống kê hiệu suất phiên
+    avg_processing_time = Column(Float, nullable=True)  # Thời gian xử lý trung bình (ms)
+    avg_fps = Column(Float, nullable=True)  # FPS trung bình trong phiên
+    total_cache_hits = Column(Integer, default=0)  # Tổng số cache hits
+    cache_hit_rate = Column(Float, nullable=True)  # Tỷ lệ cache hit
+    
+    user = relationship("User")
+
+class PerformanceStats(database.Base):
+    __tablename__ = "performance_stats"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    session_id = Column(Integer, ForeignKey("analysis_sessions.id"), nullable=True)
+    
+    # Thống kê hiệu suất
+    processing_time = Column(Float, nullable=False)  # Thời gian xử lý (ms)
+    avg_fps = Column(Float, nullable=True)  # FPS trung bình
+    detection_rate = Column(Float, nullable=True)  # Tỷ lệ phát hiện (%)
+    cache_hits = Column(Integer, nullable=True)  # Số cache hits
+    image_size = Column(String, nullable=True)  # Kích thước ảnh
+    
+    # Metadata
+    camera_resolution = Column(String, nullable=True)
+    analysis_interval = Column(Float, nullable=True)
+    
+    user = relationship("User")
+    session = relationship("AnalysisSession") 

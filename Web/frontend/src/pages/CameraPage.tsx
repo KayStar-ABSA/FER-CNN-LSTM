@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Card, Typography, Button, Space, Spin, message, Row, Col, Progress, Statistic } from 'antd';
 import { CameraOutlined, PlayCircleOutlined, StopOutlined, VideoCameraOutlined, DatabaseOutlined, ExclamationCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { analyzeEmotion } from '../utils/api';
+import { analyzeEmotion, getPerformanceStats } from '../utils/api';
 import EmotionAnalysisResult from '../components/EmotionAnalysisResult';
 
 const { Title, Text } = Typography;
@@ -32,6 +32,15 @@ interface AnalysisResult {
   cache_hits?: number;
 }
 
+interface PerformanceStats {
+  avg_processing_time: number;
+  avg_fps: number;
+  avg_detection_rate: number;
+  total_cache_hits: number;
+  avg_cache_hit_rate: number;
+  total_analyses: number;
+}
+
 const CameraPage: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -46,11 +55,37 @@ const CameraPage: React.FC = () => {
   const [detectionRate, setDetectionRate] = useState(0);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
   const [cameraResolution, setCameraResolution] = useState<string>('640x480');
-  const [performanceStats, setPerformanceStats] = useState({
-    avgProcessingTime: 0,
-    avgFPS: 0,
-    totalProcessingTime: 0
+  const [performanceStats, setPerformanceStats] = useState<PerformanceStats>({
+    avg_processing_time: 0,
+    avg_fps: 0,
+    avg_detection_rate: 0,
+    total_cache_hits: 0,
+    avg_cache_hit_rate: 0,
+    total_analyses: 0
   });
+  const [dbPerformanceStats, setDbPerformanceStats] = useState<PerformanceStats>({
+    avg_processing_time: 0,
+    avg_fps: 0,
+    avg_detection_rate: 0,
+    total_cache_hits: 0,
+    avg_cache_hit_rate: 0,
+    total_analyses: 0
+  });
+
+  // Load performance stats from database
+  const loadPerformanceStats = async () => {
+    try {
+      const stats = await getPerformanceStats('week');
+      setDbPerformanceStats(stats);
+    } catch (error) {
+      console.error('Error loading performance stats:', error);
+    }
+  };
+
+  // Load stats on component mount
+  useEffect(() => {
+    loadPerformanceStats();
+  }, []);
 
   const startCamera = async () => {
     try {
@@ -93,9 +128,12 @@ const CameraPage: React.FC = () => {
     setDetectionRate(0);
     setCurrentSessionId(null);
     setPerformanceStats({
-      avgProcessingTime: 0,
-      avgFPS: 0,
-      totalProcessingTime: 0
+      avg_processing_time: 0,
+      avg_fps: 0,
+      avg_detection_rate: 0,
+      total_cache_hits: 0,
+      avg_cache_hit_rate: 0,
+      total_analyses: 0
     });
   };
 
@@ -158,14 +196,18 @@ const CameraPage: React.FC = () => {
       // Cập nhật thống kê hiệu suất từ backend response
       if (data.processing_time || data.avg_fps) {
         setPerformanceStats(prev => {
-          const newTotalTime = prev.totalProcessingTime + (data.processing_time || processingTime);
-          const newAvgTime = newTotalTime / (totalAnalysisCount + 1);
+          const newTotalTime = prev.avg_processing_time * prev.total_analyses + (data.processing_time || processingTime);
+          const newTotalAnalyses = prev.total_analyses + 1;
+          const newAvgTime = newTotalTime / newTotalAnalyses;
           const newAvgFPS = data.avg_fps || (1000 / newAvgTime);
           
           return {
-            avgProcessingTime: data.processing_time || newAvgTime,
-            avgFPS: newAvgFPS,
-            totalProcessingTime: newTotalTime
+            avg_processing_time: newAvgTime,
+            avg_fps: newAvgFPS,
+            avg_detection_rate: prev.avg_detection_rate,
+            total_cache_hits: prev.total_cache_hits + (data.cache_hits || 0),
+            avg_cache_hit_rate: ((prev.total_cache_hits + (data.cache_hits || 0)) / newTotalAnalyses) * 100,
+            total_analyses: newTotalAnalyses
           };
         });
       }
@@ -189,6 +231,11 @@ const CameraPage: React.FC = () => {
       const total = totalAnalysisCount + 1;
       const detected = total - noFaceCount;
       setDetectionRate((detected / total) * 100);
+      
+      // Reload performance stats from database every 10 analyses
+      if (totalAnalysisCount % 10 === 0) {
+        loadPerformanceStats();
+      }
       
     } catch (error: any) {
       console.error('Stream analysis error:', error);
@@ -238,14 +285,18 @@ const CameraPage: React.FC = () => {
       // Cập nhật thống kê hiệu suất từ backend response
       if (data.processing_time || data.avg_fps) {
         setPerformanceStats(prev => {
-          const newTotalTime = prev.totalProcessingTime + (data.processing_time || processingTime);
-          const newAvgTime = newTotalTime / (totalAnalysisCount + 1);
+          const newTotalTime = prev.avg_processing_time * prev.total_analyses + (data.processing_time || processingTime);
+          const newTotalAnalyses = prev.total_analyses + 1;
+          const newAvgTime = newTotalTime / newTotalAnalyses;
           const newAvgFPS = data.avg_fps || (1000 / newAvgTime);
           
           return {
-            avgProcessingTime: data.processing_time || newAvgTime,
-            avgFPS: newAvgFPS,
-            totalProcessingTime: newTotalTime
+            avg_processing_time: newAvgTime,
+            avg_fps: newAvgFPS,
+            avg_detection_rate: prev.avg_detection_rate,
+            total_cache_hits: prev.total_cache_hits + (data.cache_hits || 0),
+            avg_cache_hit_rate: ((prev.total_cache_hits + (data.cache_hits || 0)) / newTotalAnalyses) * 100,
+            total_analyses: newTotalAnalyses
           };
         });
       }
@@ -262,6 +313,9 @@ const CameraPage: React.FC = () => {
       const total = totalAnalysisCount + 1;
       const detected = total - noFaceCount;
       setDetectionRate((detected / total) * 100);
+      
+      // Reload performance stats from database
+      loadPerformanceStats();
       
     } catch (error: any) {
       console.error('Analysis error:', error);
@@ -283,7 +337,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Tốc độ xử lý"
-              value={analysisResult?.avg_fps || performanceStats.avgFPS}
+              value={analysisResult?.avg_fps || performanceStats.avg_fps || dbPerformanceStats.avg_fps}
               suffix="FPS"
               prefix={<ThunderboltOutlined style={{ color: '#52c41a' }} />}
               precision={1}
@@ -295,7 +349,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Thời gian xử lý"
-              value={analysisResult?.processing_time || performanceStats.avgProcessingTime}
+              value={analysisResult?.processing_time || performanceStats.avg_processing_time || dbPerformanceStats.avg_processing_time}
               suffix="ms"
               precision={0}
               valueStyle={{ fontSize: '16px' }}
@@ -306,7 +360,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Tỷ lệ phát hiện"
-              value={detectionRate}
+              value={detectionRate || dbPerformanceStats.avg_detection_rate}
               suffix="%"
               precision={1}
               valueStyle={{ fontSize: '16px' }}
@@ -355,16 +409,15 @@ const CameraPage: React.FC = () => {
                   position: 'absolute',
                   top: '10px',
                   left: '10px',
-                  background: 'rgba(0,0,0,0.8)',
+                  background: 'rgba(0,0,0,0.7)',
                   color: 'white',
                   padding: '6px 10px',
                   borderRadius: '4px',
-                  fontSize: '11px',
-                  fontFamily: 'monospace'
+                  fontSize: '11px'
                 }}>
-                  <div> {analysisResult.avg_fps || performanceStats.avgFPS.toFixed(1)} FPS</div>
-                  <div> {analysisResult.processing_time || performanceStats.avgProcessingTime.toFixed(0)}ms</div>
-                  <div> Cache: {analysisResult.cache_hits || 0}</div>
+                  <div>⚡ {analysisResult?.avg_fps || performanceStats.avg_fps?.toFixed(1)} FPS</div>
+                  <div>⏱️ {analysisResult?.processing_time || performanceStats.avg_processing_time?.toFixed(0)}ms</div>
+                  <div>💾 Cache: {analysisResult?.cache_hits || 0}</div>
                 </div>
               )}
             </div>
@@ -405,7 +458,7 @@ const CameraPage: React.FC = () => {
                 onClick={startStreaming}
                 disabled={!isCameraOn || isStreaming}
               >
-                Stream (0.8s)
+                Bắt đầu Stream
               </Button>
               <Button
                 danger
@@ -414,7 +467,7 @@ const CameraPage: React.FC = () => {
                 onClick={stopStreaming}
                 disabled={!isStreaming}
               >
-                Dừng
+                Dừng Stream
               </Button>
             </Space>
           </Card>
@@ -448,7 +501,7 @@ const CameraPage: React.FC = () => {
 
             {/* Session Info - Compact */}
             {currentSessionId && (
-              <Card title="Phiên làm việc" size="small" style={{ flex: 1 }}>
+              <Card title="Thông tin phiên" size="small" style={{ flex: 1 }}>
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <Row justify="space-between">
                     <Text strong>Session ID:</Text>

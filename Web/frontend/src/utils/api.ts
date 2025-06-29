@@ -47,8 +47,10 @@ export const apiCall = async (endpoint: string, options: RequestInit = {}) => {
 export const getStats = (period: string) => apiCall(`/stats/${period}`);
 export const getDetectionStats = (period: string) => apiCall(`/detection-stats/${period}`);
 export const getEngagementStats = (period: string) => apiCall(`/engagement-stats/${period}`);
+export const getPerformanceStats = (period: string) => apiCall(`/performance-stats/${period}`);
 export const getUserSessions = () => apiCall('/user-sessions');
 export const getAdminStats = (period: string) => apiCall(`/admin/stats/${period}`);
+export const getAdminPerformanceStats = (period: string) => apiCall(`/admin/performance-stats/${period}`);
 export const getUsers = () => apiCall('/admin/users');
 export const createUser = (userData: any) => apiCall('/admin/users', {
   method: 'POST',
