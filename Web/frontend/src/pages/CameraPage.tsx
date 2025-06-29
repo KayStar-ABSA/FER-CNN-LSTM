@@ -1,44 +1,21 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Card, Typography, Button, Space, Spin, message, Row, Col, Progress, Statistic } from 'antd';
-import { CameraOutlined, PlayCircleOutlined, StopOutlined, VideoCameraOutlined, DatabaseOutlined, ExclamationCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { CameraOutlined, PlayCircleOutlined, StopOutlined, ThunderboltOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { Button, Card, Col, message, Progress, Row, Space, Statistic, Typography } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
+import { AnalysisResult } from '../types';
 import { analyzeEmotion, getPerformanceStats } from '../utils/api';
-import EmotionAnalysisResult from '../components/EmotionAnalysisResult';
 
 const { Title, Text } = Typography;
 
-interface EmotionResult {
-  face_position: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  emotions: { [key: string]: number };
-  dominant_emotion: string;
-  dominant_emotion_vn: string;
-  dominant_emotion_score: number;
-  engagement: string;
-  emotions_vn: { [key: string]: number };
-}
-
-interface AnalysisResult {
-  faces_detected: number;
-  results: EmotionResult[];
-  success: boolean;
-  session_id?: number;
-  processing_time?: number;
-  avg_fps?: number;
-  image_size?: string;
-  cache_hits?: number;
-}
-
 interface PerformanceStats {
-  avg_processing_time: number;
-  avg_fps: number;
-  avg_detection_rate: number;
-  total_cache_hits: number;
-  avg_cache_hit_rate: number;
+  average_processing_time: number;
+  average_fps: number;
+  detection_rate: number;
   total_analyses: number;
+  successful_detections: number;
+  failed_detections: number;
+  average_image_quality: number;
+  average_emotion_score: number;
+  total_sessions: number;
 }
 
 const CameraPage: React.FC = () => {
@@ -53,49 +30,89 @@ const CameraPage: React.FC = () => {
   const [noFaceCount, setNoFaceCount] = useState(0);
   const [totalAnalysisCount, setTotalAnalysisCount] = useState(0);
   const [detectionRate, setDetectionRate] = useState(0);
-  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
   const [cameraResolution, setCameraResolution] = useState<string>('640x480');
-  const [performanceStats, setPerformanceStats] = useState<PerformanceStats>({
-    avg_processing_time: 0,
-    avg_fps: 0,
-    avg_detection_rate: 0,
-    total_cache_hits: 0,
-    avg_cache_hit_rate: 0,
-    total_analyses: 0
-  });
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
   const [dbPerformanceStats, setDbPerformanceStats] = useState<PerformanceStats>({
-    avg_processing_time: 0,
-    avg_fps: 0,
-    avg_detection_rate: 0,
-    total_cache_hits: 0,
-    avg_cache_hit_rate: 0,
-    total_analyses: 0
+    average_processing_time: 0,
+    average_fps: 0,
+    detection_rate: 0,
+    total_analyses: 0,
+    successful_detections: 0,
+    failed_detections: 0,
+    average_image_quality: 0,
+    average_emotion_score: 0,
+    total_sessions: 0
   });
 
   // Load performance stats from database
   const loadPerformanceStats = async () => {
     try {
-      const stats = await getPerformanceStats('week');
-      setDbPerformanceStats(stats);
+      const response = await getPerformanceStats('day');
+      if (response.success && response.detection_metrics) {
+        setDbPerformanceStats({
+          total_analyses: response.detection_metrics.total_analyses || 0,
+          successful_detections: response.detection_metrics.successful_detections || 0,
+          failed_detections: response.detection_metrics.failed_detections || 0,
+          detection_rate: response.detection_metrics.detection_rate || 0,
+          average_image_quality: response.detection_metrics.average_image_quality || 0,
+          average_emotion_score: response.engagement_metrics?.average_emotion_score || 0,
+          average_fps: response.average_fps || 0,
+          average_processing_time: response.average_processing_time || 0,
+          total_sessions: response.total_sessions || 0
+        });
+      }
     } catch (error) {
       console.error('Error loading performance stats:', error);
     }
   };
 
-  // Load stats on component mount
+  // Load performance stats on component mount
   useEffect(() => {
     loadPerformanceStats();
   }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (streamInterval) {
+        clearInterval(streamInterval);
+      }
+      // End session when component unmounts
+      if (currentSessionId) {
+        endCurrentSession();
+      }
+    };
+  }, [currentSessionId]);
+
+  const endCurrentSession = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/emotion/end-session`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        console.log('Session ended successfully');
+        setCurrentSessionId(null);
+      }
+    } catch (error) {
+      console.error('Error ending session:', error);
+    }
+  };
 
   const startCamera = async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
-            width: { ideal: 640 },  // Giảm độ phân giải để tăng tốc
+            width: { ideal: 640 },
             height: { ideal: 480 },
             facingMode: 'user',
-            frameRate: { ideal: 30 }  // Giới hạn FPS
+            frameRate: { ideal: 30 }
           } 
         });
         if (videoRef.current) {
@@ -113,7 +130,7 @@ const CameraPage: React.FC = () => {
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = async () => {
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
@@ -121,19 +138,27 @@ const CameraPage: React.FC = () => {
       setIsCameraOn(false);
     }
     stopStreaming();
+    
+    // End current session
+    if (currentSessionId) {
+      await endCurrentSession();
+    }
+    
     // Reset thống kê và session khi tắt camera
     setSavedCount(0);
     setNoFaceCount(0);
     setTotalAnalysisCount(0);
     setDetectionRate(0);
-    setCurrentSessionId(null);
-    setPerformanceStats({
-      avg_processing_time: 0,
-      avg_fps: 0,
-      avg_detection_rate: 0,
-      total_cache_hits: 0,
-      avg_cache_hit_rate: 0,
-      total_analyses: 0
+    setDbPerformanceStats({
+      average_processing_time: 0,
+      average_fps: 0,
+      detection_rate: 0,
+      total_analyses: 0,
+      successful_detections: 0,
+      failed_detections: 0,
+      average_image_quality: 0,
+      average_emotion_score: 0,
+      total_sessions: 0
     });
   };
 
@@ -145,17 +170,20 @@ const CameraPage: React.FC = () => {
     setIsStreaming(false);
   };
 
-  const startStreaming = () => {
+  const handleStartStream = () => {
     if (!isCameraOn) {
-      message.error('Vui lòng bật camera trước');
-      return;
+      setIsCameraOn(true);
+      setIsStreaming(true);
+      
+      // Bắt đầu streaming với tần suất cao hơn
+      const interval = setInterval(() => {
+        if (isStreaming) {
+          captureFrame();
+        }
+      }, 200); // Tăng từ 800ms lên 200ms
+      
+      setStreamInterval(interval);
     }
-    
-    setIsStreaming(true);
-    const interval = setInterval(() => {
-      captureFrame();
-    }, 800); // Giảm xuống 800ms (1.25 FPS) để tăng tần suất phân tích
-    setStreamInterval(interval);
   };
 
   const captureFrame = async () => {
@@ -169,55 +197,56 @@ const CameraPage: React.FC = () => {
     const canvasHeight = 480;
     
     ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
-    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8); // Giảm chất lượng ảnh để tăng tốc
     
     try {
-      const startTime = performance.now();
-      
-      const data = await analyzeEmotion({ 
-        image: dataUrl,
-        save_to_db: true,
-        session_id: currentSessionId,
-        camera_resolution: cameraResolution,
-        analysis_interval: 0.8
+      // Convert canvas to blob
+      const blob = await new Promise<Blob>((resolve) => {
+        canvasRef.current!.toBlob((blob) => {
+          resolve(blob!);
+        }, 'image/jpeg', 0.8);
       });
       
-      const endTime = performance.now();
-      const processingTime = endTime - startTime;
+      // Create file from blob
+      const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
       
-      // Cập nhật session_id nếu có
-      if (data.session_id && !currentSessionId) {
-        setCurrentSessionId(data.session_id);
-      }
+      const data = await analyzeEmotion(file);
       
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       
-      // Cập nhật thống kê hiệu suất từ backend response
-      if (data.processing_time || data.avg_fps) {
-        setPerformanceStats(prev => {
-          const newTotalTime = prev.avg_processing_time * prev.total_analyses + (data.processing_time || processingTime);
+      // Lưu session ID nếu có
+      if (data.session_id && !currentSessionId) {
+        setCurrentSessionId(data.session_id);
+      }
+      
+      // Cập nhật thống kê hiệu suất
+      if (data.analysis?.processing_time) {
+        setDbPerformanceStats(prev => {
+          const newTotalTime = prev.average_processing_time * prev.total_analyses + data.analysis!.processing_time;
           const newTotalAnalyses = prev.total_analyses + 1;
           const newAvgTime = newTotalTime / newTotalAnalyses;
-          const newAvgFPS = data.avg_fps || (1000 / newAvgTime);
+          const newAvgFPS = 1000 / newAvgTime;
           
           return {
-            avg_processing_time: newAvgTime,
-            avg_fps: newAvgFPS,
-            avg_detection_rate: prev.avg_detection_rate,
-            total_cache_hits: prev.total_cache_hits + (data.cache_hits || 0),
-            avg_cache_hit_rate: ((prev.total_cache_hits + (data.cache_hits || 0)) / newTotalAnalyses) * 100,
-            total_analyses: newTotalAnalyses
+            average_processing_time: newAvgTime,
+            average_fps: newAvgFPS,
+            detection_rate: prev.detection_rate,
+            total_analyses: newTotalAnalyses,
+            successful_detections: prev.successful_detections,
+            failed_detections: prev.failed_detections,
+            average_image_quality: prev.average_image_quality,
+            average_emotion_score: prev.average_emotion_score,
+            total_sessions: prev.total_sessions
           };
         });
       }
       
       // Đếm số kết quả đã lưu
-      if (data.faces_detected > 0) {
-        setSavedCount(prev => prev + data.faces_detected);
+      if (data.analysis?.faces_detected && data.analysis.faces_detected > 0) {
+        setSavedCount(prev => prev + data.analysis!.faces_detected);
         // Hiển thị thông báo thỉnh thoảng
         if (Math.random() < 0.05) { // 5% chance
-          message.success(`Phát hiện ${data.faces_detected} khuôn mặt! (${data.processing_time}ms)`, 1);
+          message.success(`Phát hiện ${data.analysis.faces_detected} khuôn mặt! (${data.analysis.processing_time}ms)`, 1);
         }
       } else {
         setNoFaceCount(prev => prev + 1);
@@ -231,11 +260,6 @@ const CameraPage: React.FC = () => {
       const total = totalAnalysisCount + 1;
       const detected = total - noFaceCount;
       setDetectionRate((detected / total) * 100);
-      
-      // Reload performance stats from database every 10 analyses
-      if (totalAnalysisCount % 10 === 0) {
-        loadPerformanceStats();
-      }
       
     } catch (error: any) {
       console.error('Stream analysis error:', error);
@@ -257,53 +281,54 @@ const CameraPage: React.FC = () => {
     const canvasHeight = 480;
     
     ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
-    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8);
     
     setLoading(true);
     try {
-      const startTime = performance.now();
-      
-      const data = await analyzeEmotion({ 
-        image: dataUrl,
-        save_to_db: true,
-        session_id: currentSessionId,
-        camera_resolution: cameraResolution,
-        analysis_interval: null
+      // Convert canvas to blob
+      const blob = await new Promise<Blob>((resolve) => {
+        canvasRef.current!.toBlob((blob) => {
+          resolve(blob!);
+        }, 'image/jpeg', 0.8);
       });
       
-      const endTime = performance.now();
-      const processingTime = endTime - startTime;
+      // Create file from blob
+      const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
       
-      // Cập nhật session_id nếu có
-      if (data.session_id && !currentSessionId) {
-        setCurrentSessionId(data.session_id);
-      }
+      const data = await analyzeEmotion(file);
       
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       
-      // Cập nhật thống kê hiệu suất từ backend response
-      if (data.processing_time || data.avg_fps) {
-        setPerformanceStats(prev => {
-          const newTotalTime = prev.avg_processing_time * prev.total_analyses + (data.processing_time || processingTime);
+      // Lưu session ID nếu có
+      if (data.session_id && !currentSessionId) {
+        setCurrentSessionId(data.session_id);
+      }
+      
+      // Cập nhật thống kê hiệu suất
+      if (data.analysis?.processing_time) {
+        setDbPerformanceStats(prev => {
+          const newTotalTime = prev.average_processing_time * prev.total_analyses + data.analysis!.processing_time;
           const newTotalAnalyses = prev.total_analyses + 1;
           const newAvgTime = newTotalTime / newTotalAnalyses;
-          const newAvgFPS = data.avg_fps || (1000 / newAvgTime);
+          const newAvgFPS = 1000 / newAvgTime;
           
           return {
-            avg_processing_time: newAvgTime,
-            avg_fps: newAvgFPS,
-            avg_detection_rate: prev.avg_detection_rate,
-            total_cache_hits: prev.total_cache_hits + (data.cache_hits || 0),
-            avg_cache_hit_rate: ((prev.total_cache_hits + (data.cache_hits || 0)) / newTotalAnalyses) * 100,
-            total_analyses: newTotalAnalyses
+            average_processing_time: newAvgTime,
+            average_fps: newAvgFPS,
+            detection_rate: prev.detection_rate,
+            total_analyses: newTotalAnalyses,
+            successful_detections: prev.successful_detections,
+            failed_detections: prev.failed_detections,
+            average_image_quality: prev.average_image_quality,
+            average_emotion_score: prev.average_emotion_score,
+            total_sessions: prev.total_sessions
           };
         });
       }
       
-      if (data.faces_detected > 0) {
-        message.success(`Phát hiện ${data.faces_detected} khuôn mặt và đã lưu vào database! (${data.processing_time || processingTime.toFixed(0)}ms)`);
-        setSavedCount(prev => prev + data.faces_detected);
+      if (data.analysis?.faces_detected && data.analysis.faces_detected > 0) {
+        message.success(`Phát hiện ${data.analysis.faces_detected} khuôn mặt và đã lưu vào database! (${data.analysis.processing_time}ms)`);
+        setSavedCount(prev => prev + data.analysis!.faces_detected);
       } else {
         message.warning('Không phát hiện khuôn mặt. Hãy đảm bảo khuôn mặt rõ ràng và đủ ánh sáng.');
         setNoFaceCount(prev => prev + 1);
@@ -313,9 +338,6 @@ const CameraPage: React.FC = () => {
       const total = totalAnalysisCount + 1;
       const detected = total - noFaceCount;
       setDetectionRate((detected / total) * 100);
-      
-      // Reload performance stats from database
-      loadPerformanceStats();
       
     } catch (error: any) {
       console.error('Analysis error:', error);
@@ -337,7 +359,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Tốc độ xử lý"
-              value={analysisResult?.avg_fps || performanceStats.avg_fps || dbPerformanceStats.avg_fps}
+              value={dbPerformanceStats.average_fps || 0}
               suffix="FPS"
               prefix={<ThunderboltOutlined style={{ color: '#52c41a' }} />}
               precision={1}
@@ -349,7 +371,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Thời gian xử lý"
-              value={analysisResult?.processing_time || performanceStats.avg_processing_time || dbPerformanceStats.avg_processing_time}
+              value={dbPerformanceStats.average_processing_time || 0}
               suffix="ms"
               precision={0}
               valueStyle={{ fontSize: '16px' }}
@@ -360,7 +382,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Tỷ lệ phát hiện"
-              value={detectionRate || dbPerformanceStats.avg_detection_rate}
+              value={dbPerformanceStats.detection_rate || 0}
               suffix="%"
               precision={1}
               valueStyle={{ fontSize: '16px' }}
@@ -371,7 +393,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Độ phân giải"
-              value={analysisResult?.image_size || cameraResolution}
+              value={cameraResolution}
               valueStyle={{ fontSize: '14px' }}
             />
           </Card>
@@ -415,9 +437,9 @@ const CameraPage: React.FC = () => {
                   borderRadius: '4px',
                   fontSize: '11px'
                 }}>
-                  <div>⚡ {analysisResult?.avg_fps || performanceStats.avg_fps?.toFixed(1)} FPS</div>
-                  <div>⏱️ {analysisResult?.processing_time || performanceStats.avg_processing_time?.toFixed(0)}ms</div>
-                  <div>💾 Cache: {analysisResult?.cache_hits || 0}</div>
+                  <div>⚡ {dbPerformanceStats.average_fps?.toFixed(1)} FPS</div>
+                  <div>⏱️ {analysisResult.analysis?.processing_time || dbPerformanceStats.average_processing_time?.toFixed(0)}ms</div>
+                  <div>💾 Cache: 0</div>
                 </div>
               )}
             </div>
@@ -455,7 +477,7 @@ const CameraPage: React.FC = () => {
                 type="default"
                 size="small"
                 icon={<VideoCameraOutlined />}
-                onClick={startStreaming}
+                onClick={handleStartStream}
                 disabled={!isCameraOn || isStreaming}
               >
                 Bắt đầu Stream
@@ -500,17 +522,19 @@ const CameraPage: React.FC = () => {
             </Card>
 
             {/* Session Info - Compact */}
-            {currentSessionId && (
+            {analysisResult && (
               <Card title="Thông tin phiên" size="small" style={{ flex: 1 }}>
                 <Space direction="vertical" style={{ width: '100%' }}>
-                  <Row justify="space-between">
-                    <Text strong>Session ID:</Text>
-                    <Text code>{currentSessionId}</Text>
-                  </Row>
                   <Row justify="space-between">
                     <Text strong>Trạng thái:</Text>
                     <Text style={{ color: isStreaming ? '#52c41a' : '#faad14' }}>
                       {isStreaming ? '🟢 Đang stream' : '🟡 Sẵn sàng'}
+                    </Text>
+                  </Row>
+                  <Row justify="space-between">
+                    <Text strong>Kết quả:</Text>
+                    <Text style={{ color: analysisResult.success ? '#52c41a' : '#ff4d4f' }}>
+                      {analysisResult.success ? '✅ Thành công' : '❌ Thất bại'}
                     </Text>
                   </Row>
                 </Space>
@@ -518,10 +542,31 @@ const CameraPage: React.FC = () => {
             )}
 
             {/* Analysis Results - Compact */}
-            {analysisResult && (
+            {analysisResult && analysisResult.analysis && (
               <Card title="Kết quả phân tích" size="small" style={{ flex: 2 }}>
                 <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                  <EmotionAnalysisResult result={analysisResult} />
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Row justify="space-between">
+                      <Text strong>Cảm xúc chính:</Text>
+                      <Text>{analysisResult.analysis.dominant_emotion_vn}</Text>
+                    </Row>
+                    <Row justify="space-between">
+                      <Text strong>Điểm số:</Text>
+                      <Text>{(analysisResult.analysis.dominant_emotion_score * 100).toFixed(1)}%</Text>
+                    </Row>
+                    <Row justify="space-between">
+                      <Text strong>Tương tác:</Text>
+                      <Text>{analysisResult.analysis.engagement}</Text>
+                    </Row>
+                    <Row justify="space-between">
+                      <Text strong>Khuôn mặt:</Text>
+                      <Text>{analysisResult.analysis.faces_detected}</Text>
+                    </Row>
+                    <Row justify="space-between">
+                      <Text strong>Chất lượng ảnh:</Text>
+                      <Text>{(analysisResult.analysis.image_quality * 100).toFixed(1)}%</Text>
+                    </Row>
+                  </Space>
                 </div>
               </Card>
             )}

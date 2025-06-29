@@ -1,204 +1,294 @@
+import { DeleteOutlined, EditOutlined, EyeOutlined, UserAddOutlined } from '@ant-design/icons';
+import { Button, Card, Checkbox, Col, Form, Input, message, Modal, Row, Space, Statistic, Table, Typography } from 'antd';
 import React, { useEffect, useState } from 'react';
-import { 
-  Card, 
-  Typography, 
-  Button, 
-  Modal, 
-  Form, 
-  Input, 
-  Switch, 
-  Table, 
-  Space, 
-  Tag,
-  message 
-} from 'antd';
-import { EditOutlined, PlusOutlined, UserOutlined, CrownOutlined } from '@ant-design/icons';
-import { getUsers, createUser, updateUser } from '../utils/api';
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import { User } from '../types/user';
+import { createUser, getUsers } from '../utils/api';
+import { getUserListColumns } from '../utils/tableUtils';
 
 const { Title } = Typography;
 
-interface User {
-  id: number;
-  username: string;
-  is_admin: boolean;
-}
-
 const AdminUserList: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [open, setOpen] = useState(false);
-  const [editUser, setEditUser] = useState<User | null>(null);
-  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [, setSelectedUser] = useState<User | null>(null);
+  const [isAddUserModalVisible, setIsAddUserModalVisible] = useState(false);
+  const [addUserForm] = Form.useForm();
+  const [addingUser, setAddingUser] = useState(false);
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      const data = await getUsers();
-      setUsers(Array.isArray(data) ? data : []);
+      const usersData = await getUsers();
+      
+      // Handle the backend response structure: { success: true, users: [...], total_count: ... }
+      const usersArray = Array.isArray(usersData) ? usersData : usersData?.users || [];
+      
+      // Add mock data for demonstration
+      const usersWithMockData = usersArray.map((user: any) => ({
+        ...user,
+        created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+        last_login: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        status: Math.random() > 0.2 ? 'active' : 'inactive'
+      }));
+      setUsers(usersWithMockData);
     } catch (error) {
       console.error('Error fetching users:', error);
-      message.error('Không thể tải danh sách người dùng');
-    }
-  };
-
-  useEffect(() => { fetchUsers(); }, []);
-
-  const handleOpenAdd = () => {
-    setEditUser(null);
-    form.resetFields();
-    setOpen(true);
-  };
-
-  const handleOpenEdit = (user: User) => {
-    setEditUser(user);
-    form.setFieldsValue({
-      username: user.username,
-      password: '',
-      is_admin: user.is_admin
-    });
-    setOpen(true);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
-    form.resetFields();
-  };
-
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      setLoading(true);
-      
-      if (editUser) {
-        await updateUser(editUser.id, { 
-          password: values.password || undefined, 
-          is_admin: values.is_admin 
-        });
-        message.success('Cập nhật thành công');
-      } else {
-        await createUser(values);
-        message.success('Thêm thành công');
-      }
-      
-      handleClose();
-      fetchUsers();
-    } catch (error: any) {
-      if (error.errorFields) {
-        message.error('Vui lòng kiểm tra thông tin');
-      } else {
-        message.error(error.message || 'Lỗi mạng');
-      }
+      message.error('Lỗi khi tải danh sách người dùng');
+      setUsers([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
   };
 
-  const columns = [
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleViewUser = (user: User) => {
+    setSelectedUser(user);
+    message.info(`Xem thông tin người dùng: ${user.username}`);
+  };
+
+  const handleEditUser = (user: User) => {
+    message.info(`Chỉnh sửa người dùng: ${user.username}`);
+  };
+
+  const handleDeleteUser = (user: User) => {
+    message.warning(`Xóa người dùng: ${user.username}`);
+  };
+
+  const handleAddUser = () => {
+    setIsAddUserModalVisible(true);
+  };
+
+  const handleAddUserSubmit = async (values: any) => {
+    setAddingUser(true);
+    try {
+      const result = await createUser({
+        username: values.username,
+        password: values.password,
+        is_admin: values.is_admin || false
+      });
+      
+      if (result.success) {
+        message.success('Tạo người dùng thành công!');
+        setIsAddUserModalVisible(false);
+        addUserForm.resetFields();
+        fetchUsers(); // Refresh user list
+      } else {
+        message.error(result.error || 'Lỗi khi tạo người dùng');
+      }
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      
+      // Xử lý lỗi chi tiết hơn
+      if (error.message.includes('422')) {
+        message.error('Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin.');
+      } else if (error.message.includes('409')) {
+        message.error('Tên đăng nhập đã tồn tại. Vui lòng chọn tên khác.');
+      } else if (error.message.includes('403')) {
+        message.error('Bạn không có quyền tạo người dùng mới.');
+      } else {
+        message.error(error.message || 'Lỗi khi tạo người dùng');
+      }
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  const handleCancelAddUser = () => {
+    setIsAddUserModalVisible(false);
+    addUserForm.resetFields();
+  };
+
+  const extendedColumns = [
+    ...getUserListColumns(),
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-      render: (id: number) => <span>{id}</span>,
+      title: 'Ngày tạo',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: 'Username',
-      dataIndex: 'username',
-      key: 'username',
-      render: (text: string, record: User) => (
-        <Space>
-          {record.is_admin ? <CrownOutlined style={{ color: '#1890ff' }} /> : <UserOutlined />}
-          <span>{text}</span>
-          {record.is_admin && <Tag color="blue">Admin</Tag>}
-        </Space>
-      ),
+      title: 'Đăng nhập cuối',
+      dataIndex: 'last_login',
+      key: 'last_login',
+      render: (date: string) => new Date(date).toLocaleString('vi-VN'),
     },
     {
       title: 'Thao tác',
       key: 'actions',
-      width: 100,
       render: (_: any, record: User) => (
-        <Button 
-          type="text" 
-          icon={<EditOutlined />} 
-          onClick={() => handleOpenEdit(record)}
-        />
+        <Space size="small">
+          <Button
+            type="text"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewUser(record)}
+            title="Xem chi tiết"
+          />
+          <Button
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => handleEditUser(record)}
+            title="Chỉnh sửa"
+          />
+          {!record.is_admin && (
+            <Button
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDeleteUser(record)}
+              title="Xóa"
+            />
+          )}
+        </Space>
       ),
     },
   ];
 
+  if (loading) {
+    return <LoadingSpinner message="Đang tải danh sách người dùng..." />;
+  }
+
+  const activeUsers = users.filter(user => user.status === 'active');
+  const adminUsers = users.filter(user => user.is_admin);
+  const regularUsers = users.filter(user => !user.is_admin);
+
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <Card style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)', borderRadius: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <Title level={3} style={{ margin: 0 }}>Quản lý người dùng</Title>
-          <Button 
-            type="primary" 
-            icon={<PlusOutlined />} 
-            onClick={handleOpenAdd}
-            size="large"
+    <div style={{ padding: '16px' }}>
+      <Row justify="space-between" align="middle" style={{ marginBottom: '16px' }}>
+        <Col>
+          <Title level={3}>Quản lý người dùng</Title>
+        </Col>
+        <Col>
+          <Button
+            type="primary"
+            icon={<UserAddOutlined />}
+            onClick={handleAddUser}
           >
-            Thêm user
+            Thêm người dùng
           </Button>
-        </div>
-        
+        </Col>
+      </Row>
+
+      {/* Statistics Cards */}
+      <Row gutter={16} style={{ marginBottom: '24px' }}>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="Tổng số người dùng"
+              value={users.length}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="Người dùng hoạt động"
+              value={activeUsers.length}
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="Quản trị viên"
+              value={adminUsers.length}
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="Người dùng thường"
+              value={regularUsers.length}
+              valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Users Table */}
+      <Card>
         <Table
-          columns={columns}
           dataSource={users}
+          columns={extendedColumns}
           rowKey="id"
           pagination={{
             pageSize: 10,
-            showSizeChanger: false,
-            showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} người dùng`,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) =>
+              `${range[0]}-${range[1]} của ${total} người dùng`,
           }}
-          style={{ backgroundColor: 'white' }}
         />
       </Card>
 
+      {/* Add User Modal */}
       <Modal
-        title={editUser ? 'Sửa user' : 'Thêm user'}
-        open={open}
-        onCancel={handleClose}
-        onOk={handleSubmit}
-        confirmLoading={loading}
-        okText="Lưu"
+        title="Thêm người dùng mới"
+        open={isAddUserModalVisible}
+        onOk={addUserForm.submit}
+        onCancel={handleCancelAddUser}
+        confirmLoading={addingUser}
+        okText="Tạo"
         cancelText="Hủy"
-        width={400}
       >
         <Form
-          form={form}
+          form={addUserForm}
           layout="vertical"
-          style={{ marginTop: 16 }}
+          onFinish={handleAddUserSubmit}
         >
           <Form.Item
             name="username"
-            label="Username"
-            rules={[{ required: true, message: 'Vui lòng nhập username!' }]}
+            label="Tên đăng nhập"
+            rules={[
+              { required: true, message: 'Vui lòng nhập tên đăng nhập!' },
+              { min: 3, message: 'Tên đăng nhập phải có ít nhất 3 ký tự!' }
+            ]}
           >
-            <Input 
-              disabled={!!editUser}
-              placeholder="Nhập username"
-            />
+            <Input placeholder="Nhập tên đăng nhập" />
           </Form.Item>
           
           <Form.Item
             name="password"
-            label="Password"
+            label="Mật khẩu"
             rules={[
-              { required: !editUser, message: 'Vui lòng nhập password!' },
-              { min: 6, message: 'Password phải có ít nhất 6 ký tự!' }
+              { required: true, message: 'Vui lòng nhập mật khẩu!' },
+              { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự!' }
             ]}
           >
-            <Input.Password 
-              placeholder={editUser ? 'Để trống nếu không đổi mật khẩu' : 'Nhập password'}
-            />
+            <Input.Password placeholder="Nhập mật khẩu" />
+          </Form.Item>
+          
+          <Form.Item
+            name="confirmPassword"
+            label="Xác nhận mật khẩu"
+            dependencies={['password']}
+            rules={[
+              { required: true, message: 'Vui lòng xác nhận mật khẩu!' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Mật khẩu không khớp!'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="Nhập lại mật khẩu" />
           </Form.Item>
           
           <Form.Item
             name="is_admin"
-            label="Quyền admin"
             valuePropName="checked"
           >
-            <Switch />
+            <Checkbox>Là quản trị viên</Checkbox>
           </Form.Item>
         </Form>
       </Modal>

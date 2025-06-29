@@ -1,8 +1,9 @@
+import { KeyOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
+import { Alert, Avatar, Button, Card, Form, Input, Typography } from 'antd';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Form, Input, Button, Alert, Avatar, Typography } from 'antd';
-import { LockOutlined, UserOutlined, KeyOutlined } from '@ant-design/icons';
-import { API_BASE_URL } from '../constants';
+import { LoginFormData } from '../types';
+import { login } from '../utils/api';
 
 const { Title } = Typography;
 
@@ -11,25 +12,28 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (values: { username: string; password: string }) => {
+  const handleSubmit = async (values: LoginFormData) => {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ username: values.username, password: values.password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await login(values);
+      if (data.success) {
         localStorage.setItem('token', data.access_token);
-        localStorage.setItem('is_admin', data.is_admin);
-        navigate('/dashboard');
+        localStorage.setItem('is_admin', data.user.is_admin.toString());
+        localStorage.setItem('user_id', data.user.id.toString());
+        localStorage.setItem('username', data.user.username);
+        
+        // Redirect based on user role
+        if (data.user.is_admin) {
+          navigate('/admin/users');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
-        setError(data.detail || 'Login failed');
+        setError('Login failed');
       }
-    } catch (err) {
-      setError('Network error');
+    } catch (err: any) {
+      setError(err.message || 'Network error');
     }
     setLoading(false);
   };

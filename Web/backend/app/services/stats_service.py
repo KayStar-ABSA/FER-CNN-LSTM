@@ -1,0 +1,113 @@
+from sqlalchemy.orm import Session
+from app.crud.emotion_crud import (
+    get_emotion_stats, get_all_emotion_stats, get_emotion_history, get_real_performance_stats
+)
+from app.crud.session_crud import get_user_sessions
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+
+class StatsService:
+    """Service thống kê và báo cáo"""
+    
+    @staticmethod
+    def get_user_emotion_stats(db: Session, user_id: int, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê cảm xúc của user"""
+        try:
+            emotion_stats = get_emotion_stats(db, user_id, period)
+            
+            return {
+                'success': True,
+                'period': period,
+                'emotion_stats': emotion_stats
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê cảm xúc: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_user_performance_stats(db: Session, user_id: int, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê hiệu suất của user"""
+        try:
+            # Sử dụng hàm mới để lấy dữ liệu thực từ database
+            real_stats = get_real_performance_stats(db, user_id, period)
+            
+            return {
+                'success': True,
+                'period': period,
+                'total_analyses': real_stats['total_analyses'],
+                'successful_detections': real_stats['successful_detections'],
+                'failed_detections': real_stats['failed_detections'],
+                'detection_rate': real_stats['detection_rate'],
+                'average_image_quality': real_stats['average_image_quality'],
+                'average_emotion_score': real_stats['average_emotion_score'],
+                'average_fps': real_stats['average_fps'],
+                'average_processing_time': real_stats['average_processing_time'],
+                'total_sessions': real_stats['total_sessions'],
+                # Thêm detection_metrics và engagement_metrics để tương thích với frontend
+                'detection_metrics': {
+                    'total_analyses': real_stats['total_analyses'],
+                    'successful_detections': real_stats['successful_detections'],
+                    'failed_detections': real_stats['failed_detections'],
+                    'detection_rate': real_stats['detection_rate'],
+                    'average_image_quality': real_stats['average_image_quality']
+                },
+                'engagement_metrics': {
+                    'average_emotion_score': real_stats['average_emotion_score'],
+                    'total_emotions_analyzed': real_stats['total_analyses']
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê hiệu suất: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_emotion_history_data(db: Session, user_id: int, limit: int = 100) -> Dict[str, Any]:
+        """Lấy dữ liệu lịch sử cảm xúc"""
+        try:
+            history = get_emotion_history(db, user_id, limit)
+            
+            return {
+                'success': True,
+                'history': history,
+                'total_records': len(history)
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy lịch sử cảm xúc: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_admin_dashboard_stats(db: Session, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê tổng hợp cho admin dashboard"""
+        try:
+            # Thống kê cảm xúc tổng hợp
+            emotion_stats = get_all_emotion_stats(db, period)
+            
+            # Tính tổng số kết quả phân tích
+            total_analyses = sum(emotion_stats.values()) if emotion_stats else 0
+            
+            # Tính cảm xúc phổ biến nhất
+            most_common_emotion = max(emotion_stats.items(), key=lambda x: x[1])[0] if emotion_stats else None
+            
+            return {
+                'success': True,
+                'period': period,
+                'total_analyses': total_analyses,
+                'emotion_distribution': emotion_stats,
+                'most_common_emotion': most_common_emotion,
+                'emotion_count': len(emotion_stats) if emotion_stats else 0
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê dashboard: {str(e)}'
+            } 

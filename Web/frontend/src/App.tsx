@@ -7,6 +7,7 @@ import CameraPage from './pages/CameraPage';
 import EmotionStatsPage from './pages/EmotionStatsPage';
 import AdminUserList from './pages/AdminUserList';
 import AdminLayout from './components/AdminLayout';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -14,10 +15,38 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
-          <Route path="/admin/users" element={<AdminLayout><AdminUserList /></AdminLayout>} />
-          <Route path="/camera" element={<AdminLayout><CameraPage /></AdminLayout>} />
-          <Route path="/stats" element={<AdminLayout><EmotionStatsPage /></AdminLayout>} />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <AdminLayout><AdminDashboard /></AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/users" 
+            element={
+              <ProtectedRoute requireAdmin>
+                <AdminLayout><AdminUserList /></AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/camera" 
+            element={
+              <ProtectedRoute>
+                <AdminLayout><CameraPage /></AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/stats" 
+            element={
+              <ProtectedRoute>
+                <AdminLayout><EmotionStatsPage /></AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
       </Router>
