@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.routers import auth_router, emotion_router, session_router, stats_router, admin_router
+from app.routers.system_log_router import router as system_log_router
 import logging
 from datetime import datetime
 
@@ -49,6 +50,7 @@ app.include_router(emotion_router, prefix=settings.API_V1_STR)
 app.include_router(session_router, prefix=settings.API_V1_STR)
 app.include_router(stats_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
+app.include_router(system_log_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 async def root():

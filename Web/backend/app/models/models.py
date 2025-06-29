@@ -19,6 +19,7 @@ class User(Base):
     # Relationships
     emotion_results = relationship("EmotionResult", back_populates="user", cascade="all, delete-orphan")
     analysis_sessions = relationship("AnalysisSession", back_populates="user", cascade="all, delete-orphan")
+    system_logs = relationship("SystemLog", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', is_admin={self.is_admin})>"
@@ -93,6 +94,9 @@ class SystemLog(Base):
     ip_address = Column(String(45), comment="Địa chỉ IP")
     user_agent = Column(Text, comment="User agent")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="Thời gian tạo")
+    
+    # Relationships
+    user = relationship("User", back_populates="system_logs")
     
     def __repr__(self):
         return f"<SystemLog(id={self.id}, level='{self.level}', message='{self.message[:50]}...')>" 

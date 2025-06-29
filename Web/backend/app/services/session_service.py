@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
-from app.crud.session_crud import create_session, update_session, get_user_sessions, get_session_by_id, end_session
+from app.crud.session_crud import create_session, update_session, get_user_sessions, get_session_by_id, get_active_session_by_user_id, end_session
+from app.services.system_log_service import SystemLogService
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 class SessionService:
     """Service quản lý phiên phân tích"""
@@ -12,7 +13,7 @@ class SessionService:
         """Tạo phiên phân tích mới"""
         try:
             # Kiểm tra xem user có phiên đang hoạt động không
-            active_session = get_session_by_id(db, user_id)
+            active_session = get_active_session_by_user_id(db, user_id)
             if active_session:
                 return {
                     'success': False,
@@ -21,6 +22,9 @@ class SessionService:
             
             # Tạo phiên mới
             session = create_session(db, user_id, camera_resolution, analysis_interval)
+            
+            # Log việc tạo session
+            SystemLogService.log_session_start(db, user_id, session.id, camera_resolution or "unknown")
             
             return {
                 'success': True,
@@ -113,7 +117,7 @@ class SessionService:
     def end_user_session(db: Session, user_id: int) -> Dict[str, Any]:
         """Kết thúc phiên phân tích của user"""
         try:
-            active_session = get_session_by_id(db, user_id)
+            active_session = get_active_session_by_user_id(db, user_id)
             if not active_session:
                 return {
                     'success': False,
@@ -127,10 +131,16 @@ class SessionService:
                     'error': 'Lỗi kết thúc phiên phân tích'
                 }
             
+            session_duration = (datetime.now(timezone.utc) - active_session.session_start).total_seconds()
+            
+            # Log việc kết thúc session
+            SystemLogService.log_session_end(db, user_id, active_session.id, 
+                                            session_duration, active_session.total_analyses or 0)
+            
             return {
                 'success': True,
                 'message': 'Kết thúc phiên phân tích thành công',
-                'session_duration': (datetime.utcnow() - active_session.session_start).total_seconds()
+                'session_duration': session_duration
             }
             
         except Exception as e:
@@ -143,7 +153,7 @@ class SessionService:
     def get_active_session_info(db: Session, user_id: int) -> Optional[Dict[str, Any]]:
         """Lấy thông tin phiên phân tích đang hoạt động"""
         try:
-            session = get_session_by_id(db, user_id)
+            session = get_active_session_by_user_id(db, user_id)
             if not session:
                 return None
             

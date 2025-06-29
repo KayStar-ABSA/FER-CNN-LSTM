@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.models.models import User
+from app.models.models import User, AnalysisSession
 from app.services.emotion_service import emotion_service
 from app.services.stats_service import StatsService
 from app.crud.session_crud import create_session, update_session, get_session_by_id, end_session

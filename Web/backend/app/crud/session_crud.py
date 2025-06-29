@@ -62,6 +62,13 @@ def get_session_by_id(db: Session, session_id: int):
     """Lấy phiên phân tích theo id"""
     return db.query(AnalysisSession).filter(AnalysisSession.id == session_id).first()
 
+def get_active_session_by_user_id(db: Session, user_id: int):
+    """Lấy phiên phân tích đang hoạt động của user"""
+    return db.query(AnalysisSession).filter(
+        AnalysisSession.user_id == user_id,
+        AnalysisSession.session_end == None
+    ).first()
+
 def end_session(db: Session, session_id: int):
     """Kết thúc phiên phân tích"""
     session = db.query(AnalysisSession).filter(AnalysisSession.id == session_id).first()

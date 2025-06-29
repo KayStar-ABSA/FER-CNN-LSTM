@@ -12,6 +12,7 @@ import time
 from app.core.config import settings
 from app.core.enums import EmotionType, ImageQualityLevel, EngagementLevel, get_image_quality_level, get_engagement_level
 import logging
+from app.services.system_log_service import SystemLogService
 
 logger = logging.getLogger(__name__)
 
@@ -197,16 +198,30 @@ class EmotionService:
                 image_quality=analysis_result.get('image_quality', 0.5),
                 analysis_duration=analysis_result['processing_time'],
                 confidence_level=analysis_result.get('confidence_level', 0.0),
-                processing_time=analysis_result['processing_time']
+                processing_time=analysis_result['processing_time'],
+                avg_fps=1000 / analysis_result['processing_time'] if analysis_result['processing_time'] > 0 else 0,
+                image_size=f"{analysis_result.get('image_width', 0)}x{analysis_result.get('image_height', 0)}",
+                cache_hits=0
+            )
+            
+            # Log kết quả phân tích
+            SystemLogService.log_emotion_analysis(
+                db, user_id, analysis_result['faces_detected'], 
+                analysis_result['dominant_emotion_vn'], analysis_result['processing_time']
             )
             
             return {
                 'id': emotion_result.id,
-                'emotion': emotion_result.dominant_emotion,
-                'emotion_vn': emotion_result.dominant_emotion_vn,
-                'score': emotion_result.dominant_emotion_score,
+                'emotion': emotion_result.emotion,
+                'score': emotion_result.score,
+                'faces_detected': emotion_result.faces_detected,
+                'dominant_emotion': emotion_result.dominant_emotion,
+                'dominant_emotion_vn': emotion_result.dominant_emotion_vn,
+                'dominant_emotion_score': emotion_result.dominant_emotion_score,
                 'engagement': emotion_result.engagement,
-                'timestamp': emotion_result.timestamp.isoformat()
+                'processing_time': emotion_result.processing_time,
+                'image_quality': emotion_result.image_quality,
+                'confidence_level': emotion_result.confidence_level
             }
             
         except Exception as e:

@@ -2,7 +2,7 @@ import { CameraOutlined, PlayCircleOutlined, StopOutlined, ThunderboltOutlined, 
 import { Button, Card, Col, message, Progress, Row, Space, Statistic, Typography } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import { AnalysisResult } from '../types';
-import { analyzeEmotion, getPerformanceStats } from '../utils/api';
+import { analyzeEmotion, getPerformanceStats, startAnalysisSession, endAnalysisSession, getActiveSession } from '../utils/api';
 
 const { Title, Text } = Typography;
 
@@ -69,35 +69,42 @@ const CameraPage: React.FC = () => {
   // Load performance stats on component mount
   useEffect(() => {
     loadPerformanceStats();
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
+    
+    // Kiểm tra session hiện tại
+    const checkActiveSession = async () => {
+      try {
+        const result = await getActiveSession();
+        if (result.success && result.has_active_session) {
+          setCurrentSessionId(result.session.id);
+          // Nếu có session đang hoạt động, có thể user đã refresh trang
+          // Chúng ta sẽ kết thúc session cũ để tránh conflict
+          await endCurrentSession();
+        }
+      } catch (error) {
+        console.error('Error checking active session:', error);
+      }
+    };
+    
+    checkActiveSession();
+    
+    // Cleanup khi component unmount
     return () => {
       if (streamInterval) {
         clearInterval(streamInterval);
       }
-      // End session when component unmounts
       if (currentSessionId) {
         endCurrentSession();
       }
     };
-  }, [currentSessionId]);
+  }, []);
 
   const endCurrentSession = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/emotion/end-session`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
+      const result = await endAnalysisSession();
+      if (result.success) {
         console.log('Session ended successfully');
         setCurrentSessionId(null);
+        message.success('Kết thúc phiên thành công');
       }
     } catch (error) {
       console.error('Error ending session:', error);
@@ -137,12 +144,7 @@ const CameraPage: React.FC = () => {
       videoRef.current.srcObject = null;
       setIsCameraOn(false);
     }
-    stopStreaming();
-    
-    // End current session
-    if (currentSessionId) {
-      await endCurrentSession();
-    }
+    await stopStreaming();
     
     // Reset thống kê và session khi tắt camera
     setSavedCount(0);
@@ -162,63 +164,71 @@ const CameraPage: React.FC = () => {
     });
   };
 
-  const stopStreaming = () => {
+  const stopStreaming = async () => {
     if (streamInterval) {
       clearInterval(streamInterval);
       setStreamInterval(null);
     }
     setIsStreaming(false);
-  };
-
-  const handleStartStream = () => {
-    if (!isCameraOn) {
-      setIsCameraOn(true);
-      setIsStreaming(true);
-      
-      // Bắt đầu streaming với tần suất cao hơn
-      const interval = setInterval(() => {
-        if (isStreaming) {
-          captureFrame();
-        }
-      }, 200); // Tăng từ 800ms lên 200ms
-      
-      setStreamInterval(interval);
+    
+    // Kết thúc session khi dừng stream
+    if (currentSessionId) {
+      await endCurrentSession();
     }
   };
 
+  const handleStartStream = async () => {
+    if (!isCameraOn) {
+      message.error('Bạn phải bật camera trước!');
+      return;
+    }
+    if (isStreaming) {
+      message.warning('Đang stream rồi!');
+      return;
+    }
+    
+    // Tạo session mới khi bắt đầu stream
+    try {
+      const sessionResult = await startAnalysisSession(cameraResolution, 200);
+      if (sessionResult.success) {
+        setCurrentSessionId(sessionResult.session.id);
+      }
+    } catch (error) {
+      console.error('Error creating session:', error);
+    }
+    
+    setIsStreaming(true);
+    message.success('Bắt đầu stream!');
+    let interval = setInterval(() => {
+      captureFrame();
+    }, 200);
+    setStreamInterval(interval);
+  };
+
   const captureFrame = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
+    if (!videoRef.current || !canvasRef.current) {
+      return;
+    }
     const ctx = canvasRef.current.getContext('2d');
-    if (!ctx) return;
-    
-    // Giảm kích thước canvas để tăng tốc độ xử lý
+    if (!ctx) {
+      return;
+    }
     const canvasWidth = 640;
     const canvasHeight = 480;
-    
     ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
-    
     try {
-      // Convert canvas to blob
       const blob = await new Promise<Blob>((resolve) => {
         canvasRef.current!.toBlob((blob) => {
           resolve(blob!);
         }, 'image/jpeg', 0.8);
       });
-      
-      // Create file from blob
       const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
-      
       const data = await analyzeEmotion(file);
-      
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
-      
-      // Lưu session ID nếu có
       if (data.session_id && !currentSessionId) {
         setCurrentSessionId(data.session_id);
       }
-      
       // Cập nhật thống kê hiệu suất
       if (data.analysis?.processing_time) {
         setDbPerformanceStats(prev => {
@@ -261,9 +271,8 @@ const CameraPage: React.FC = () => {
       const detected = total - noFaceCount;
       setDetectionRate((detected / total) * 100);
       
-    } catch (error: any) {
-      console.error('Stream analysis error:', error);
-      setTotalAnalysisCount(prev => prev + 1);
+    } catch (error) {
+      console.error('Lỗi khi gọi API analyzeEmotion:', error);
     }
   };
 

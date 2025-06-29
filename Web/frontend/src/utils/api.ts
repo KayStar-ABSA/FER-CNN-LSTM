@@ -124,6 +124,27 @@ export const getStatsSummary = () => {
   return apiCall('/stats/summary');
 };
 
+// Session API calls
+export const startAnalysisSession = (cameraResolution?: string, analysisInterval?: number) => {
+  const params = new URLSearchParams();
+  if (cameraResolution) params.append('camera_resolution', cameraResolution);
+  if (analysisInterval) params.append('analysis_interval', analysisInterval.toString());
+  
+  return apiCall(`/sessions/start?${params.toString()}`, {
+    method: 'POST',
+  });
+};
+
+export const endAnalysisSession = () => {
+  return apiCall('/sessions/end', {
+    method: 'POST',
+  });
+};
+
+export const getActiveSession = () => {
+  return apiCall('/sessions/active');
+};
+
 // Admin API calls
 export const getAdminStats = (period: string) => apiCall(`/admin/statistics?period=${period}`);
 export const getUsers = () => {
