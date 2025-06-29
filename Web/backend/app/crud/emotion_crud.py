@@ -65,7 +65,8 @@ def get_emotion_stats(db: Session, user_id: int, period: str = 'day'):
     
     q = db.query(EmotionResult.emotion, func.count(EmotionResult.id)).filter(
         EmotionResult.user_id == user_id,
-        EmotionResult.faces_detected > 0
+        EmotionResult.faces_detected > 0,
+        EmotionResult.emotion != 'no_face_detected'  # Loại trừ những lần không phát hiện khuôn mặt
     )
     if start:
         q = q.filter(EmotionResult.timestamp >= start)
@@ -88,7 +89,8 @@ def get_all_emotion_stats(db: Session, period: str = 'day'):
         start = None
     
     q = db.query(EmotionResult.emotion, func.count(EmotionResult.id)).filter(
-        EmotionResult.faces_detected > 0
+        EmotionResult.faces_detected > 0,
+        EmotionResult.emotion != 'no_face_detected'  # Loại trừ những lần không phát hiện khuôn mặt
     )
     if start:
         q = q.filter(EmotionResult.timestamp >= start)
@@ -99,7 +101,8 @@ def get_emotion_history(db: Session, user_id: int, limit: int = 100):
     """Lấy lịch sử phân tích cảm xúc"""
     results = db.query(EmotionResult).filter(
         EmotionResult.user_id == user_id,
-        EmotionResult.faces_detected > 0
+        EmotionResult.faces_detected > 0,
+        EmotionResult.emotion != 'no_face_detected'  # Loại trừ những lần không phát hiện khuôn mặt
     ).order_by(EmotionResult.timestamp.desc()).limit(limit).all()
     
     return [
@@ -149,19 +152,20 @@ def get_real_performance_stats(db: Session, user_id: int, period: str = 'day'):
     failed_detections = total_analyses - successful_detections
     detection_rate = (successful_detections / total_analyses * 100) if total_analyses > 0 else 0
     
-    # Tính chất lượng ảnh trung bình
-    image_qualities = [r.image_quality for r in emotion_results if r.image_quality is not None]
+    # Tính chất lượng ảnh trung bình (chỉ từ những lần thành công)
+    successful_results = [r for r in emotion_results if r.faces_detected > 0]
+    image_qualities = [r.image_quality for r in successful_results if r.image_quality is not None]
     average_image_quality = (sum(image_qualities) / len(image_qualities) * 100) if image_qualities else 0
     
-    # Tính độ tương tác trung bình
-    scores = [r.score for r in emotion_results if r.score is not None]
+    # Tính độ tương tác trung bình (chỉ từ những lần thành công)
+    scores = [r.score for r in successful_results if r.score is not None and r.score > 0]
     average_emotion_score = (sum(scores) / len(scores) * 100) if scores else 0
     
     # Tính FPS trung bình từ sessions
     fps_values = [s.avg_fps for s in sessions if s.avg_fps is not None]
     average_fps = sum(fps_values) / len(fps_values) if fps_values else 0
     
-    # Tính thời gian xử lý trung bình
+    # Tính thời gian xử lý trung bình (từ tất cả các lần phân tích)
     processing_times = [r.processing_time for r in emotion_results if r.processing_time is not None]
     average_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
     

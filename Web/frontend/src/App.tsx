@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import AdminDashboard from './pages/AdminDashboard';
 import CameraPage from './pages/CameraPage';
 import EmotionStatsPage from './pages/EmotionStatsPage';
+import PerformanceReportPage from './pages/PerformanceReportPage';
 import AdminUserList from './pages/AdminUserList';
 import AdminLayout from './components/AdminLayout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -44,6 +45,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <AdminLayout><EmotionStatsPage /></AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/performance-report" 
+            element={
+              <ProtectedRoute>
+                <AdminLayout><PerformanceReportPage /></AdminLayout>
               </ProtectedRoute>
             } 
           />

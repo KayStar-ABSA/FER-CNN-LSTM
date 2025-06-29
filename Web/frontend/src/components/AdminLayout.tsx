@@ -19,7 +19,7 @@ const menuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
   { key: '/camera', icon: <CameraOutlined />, label: 'Camera' },
   { key: '/stats', icon: <PieChartOutlined />, label: 'Thống kê cảm xúc' },
-  { key: '/performance', icon: <ThunderboltOutlined />, label: 'Hiệu suất' },
+  { key: '/performance-report', icon: <ThunderboltOutlined />, label: 'Hiệu suất' },
 ];
 
 const adminMenu = [
@@ -118,7 +118,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {location.pathname === '/dashboard' && 'Dashboard'}
             {location.pathname === '/camera' && 'Camera'}
             {location.pathname === '/stats' && 'Thống kê cảm xúc'}
-            {location.pathname === '/performance' && 'Báo cáo hiệu suất'}
+            {location.pathname === '/performance-report' && 'Báo cáo hiệu suất'}
             {location.pathname === '/admin/users' && 'Quản lý người dùng'}
           </Title>
           

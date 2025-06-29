@@ -120,6 +120,10 @@ export const getPerformanceStats = (period: string = 'day') => {
   return apiCall(`/stats/performance?period=${period}`);
 };
 
+export const getFaceDetectionStats = (period: string = 'day') => {
+  return apiCall(`/emotion/face-detection-stats?period=${period}`);
+};
+
 export const getStatsSummary = () => {
   return apiCall('/stats/summary');
 };

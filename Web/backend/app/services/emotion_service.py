@@ -179,50 +179,90 @@ class EmotionService:
     def save_emotion_result(self, db: Session, user_id: int, analysis_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Lưu kết quả phân tích vào database"""
         try:
-            if not analysis_result.get('success', False):
-                return None
-            
-            # Tạo emotion result
-            emotion_result = create_emotion_result(
-                db=db,
-                user_id=user_id,
-                emotion=analysis_result['dominant_emotion'],
-                score=analysis_result['dominant_emotion_score'],
-                faces_detected=analysis_result['faces_detected'],
-                dominant_emotion=analysis_result['dominant_emotion'],
-                dominant_emotion_vn=analysis_result['dominant_emotion_vn'],
-                dominant_emotion_score=analysis_result['dominant_emotion_score'],
-                engagement=analysis_result['engagement'],
-                emotions_scores=analysis_result['emotions_scores'],
-                emotions_scores_vn=analysis_result['emotions_scores_vn'],
-                image_quality=analysis_result.get('image_quality', 0.5),
-                analysis_duration=analysis_result['processing_time'],
-                confidence_level=analysis_result.get('confidence_level', 0.0),
-                processing_time=analysis_result['processing_time'],
-                avg_fps=1000 / analysis_result['processing_time'] if analysis_result['processing_time'] > 0 else 0,
-                image_size=f"{analysis_result.get('image_width', 0)}x{analysis_result.get('image_height', 0)}",
-                cache_hits=0
-            )
-            
-            # Log kết quả phân tích
-            SystemLogService.log_emotion_analysis(
-                db, user_id, analysis_result['faces_detected'], 
-                analysis_result['dominant_emotion_vn'], analysis_result['processing_time']
-            )
-            
-            return {
-                'id': emotion_result.id,
-                'emotion': emotion_result.emotion,
-                'score': emotion_result.score,
-                'faces_detected': emotion_result.faces_detected,
-                'dominant_emotion': emotion_result.dominant_emotion,
-                'dominant_emotion_vn': emotion_result.dominant_emotion_vn,
-                'dominant_emotion_score': emotion_result.dominant_emotion_score,
-                'engagement': emotion_result.engagement,
-                'processing_time': emotion_result.processing_time,
-                'image_quality': emotion_result.image_quality,
-                'confidence_level': emotion_result.confidence_level
-            }
+            # Lưu cả kết quả thành công và thất bại
+            if analysis_result.get('success', False):
+                # Trường hợp thành công - có phát hiện khuôn mặt
+                emotion_result = create_emotion_result(
+                    db=db,
+                    user_id=user_id,
+                    emotion=analysis_result['dominant_emotion'],
+                    score=analysis_result['dominant_emotion_score'],
+                    faces_detected=analysis_result['faces_detected'],
+                    dominant_emotion=analysis_result['dominant_emotion'],
+                    dominant_emotion_vn=analysis_result['dominant_emotion_vn'],
+                    dominant_emotion_score=analysis_result['dominant_emotion_score'],
+                    engagement=analysis_result['engagement'],
+                    emotions_scores=analysis_result['emotions_scores'],
+                    emotions_scores_vn=analysis_result['emotions_scores_vn'],
+                    image_quality=analysis_result.get('image_quality', 0.5),
+                    analysis_duration=analysis_result['processing_time'],
+                    confidence_level=analysis_result.get('confidence_level', 0.0),
+                    processing_time=analysis_result['processing_time'],
+                    avg_fps=1000 / analysis_result['processing_time'] if analysis_result['processing_time'] > 0 else 0,
+                    image_size=f"{analysis_result.get('image_width', 0)}x{analysis_result.get('image_height', 0)}",
+                    cache_hits=0
+                )
+                
+                # Log kết quả phân tích thành công
+                SystemLogService.log_emotion_analysis(
+                    db, user_id, analysis_result['faces_detected'], 
+                    analysis_result['dominant_emotion_vn'], analysis_result['processing_time']
+                )
+                
+                return {
+                    'id': emotion_result.id,
+                    'emotion': emotion_result.emotion,
+                    'score': emotion_result.score,
+                    'faces_detected': emotion_result.faces_detected,
+                    'dominant_emotion': emotion_result.dominant_emotion,
+                    'dominant_emotion_vn': emotion_result.dominant_emotion_vn,
+                    'dominant_emotion_score': emotion_result.dominant_emotion_score,
+                    'engagement': emotion_result.engagement,
+                    'processing_time': emotion_result.processing_time,
+                    'image_quality': emotion_result.image_quality,
+                    'confidence_level': emotion_result.confidence_level
+                }
+            else:
+                # Trường hợp thất bại - không phát hiện khuôn mặt
+                emotion_result = create_emotion_result(
+                    db=db,
+                    user_id=user_id,
+                    emotion='no_face_detected',  # Đánh dấu không phát hiện khuôn mặt
+                    score=0.0,
+                    faces_detected=0,
+                    dominant_emotion='no_face_detected',
+                    dominant_emotion_vn='Không phát hiện khuôn mặt',
+                    dominant_emotion_score=0.0,
+                    engagement='none',
+                    emotions_scores={},
+                    emotions_scores_vn={},
+                    image_quality=analysis_result.get('image_quality', 0.5),
+                    analysis_duration=analysis_result['processing_time'],
+                    confidence_level=0.0,
+                    processing_time=analysis_result['processing_time'],
+                    avg_fps=1000 / analysis_result['processing_time'] if analysis_result['processing_time'] > 0 else 0,
+                    image_size=f"{analysis_result.get('image_width', 0)}x{analysis_result.get('image_height', 0)}",
+                    cache_hits=0
+                )
+                
+                # Log thất bại phát hiện khuôn mặt
+                SystemLogService.log_emotion_analysis(
+                    db, user_id, 0, 'Không phát hiện khuôn mặt', analysis_result['processing_time']
+                )
+                
+                return {
+                    'id': emotion_result.id,
+                    'emotion': 'no_face_detected',
+                    'score': 0.0,
+                    'faces_detected': 0,
+                    'dominant_emotion': 'no_face_detected',
+                    'dominant_emotion_vn': 'Không phát hiện khuôn mặt',
+                    'dominant_emotion_score': 0.0,
+                    'engagement': 'none',
+                    'processing_time': emotion_result.processing_time,
+                    'image_quality': emotion_result.image_quality,
+                    'confidence_level': 0.0
+                }
             
         except Exception as e:
             logger.error(f"Lỗi lưu kết quả phân tích: {e}")

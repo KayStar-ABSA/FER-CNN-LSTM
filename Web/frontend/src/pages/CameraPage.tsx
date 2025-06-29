@@ -2,7 +2,7 @@ import { CameraOutlined, PlayCircleOutlined, StopOutlined, ThunderboltOutlined, 
 import { Button, Card, Col, message, Progress, Row, Space, Statistic, Typography } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import { AnalysisResult } from '../types';
-import { analyzeEmotion, getPerformanceStats, startAnalysisSession, endAnalysisSession, getActiveSession } from '../utils/api';
+import { analyzeEmotion, getPerformanceStats, getFaceDetectionStats, startAnalysisSession, endAnalysisSession, getActiveSession } from '../utils/api';
 
 const { Title, Text } = Typography;
 
@@ -16,6 +16,17 @@ interface PerformanceStats {
   average_image_quality: number;
   average_emotion_score: number;
   total_sessions: number;
+}
+
+interface FaceDetectionStats {
+  total_attempts: number;
+  successful_detections: number;
+  failed_detections: number;
+  detection_rate: number;
+  failure_rate: number;
+  detection_efficiency: number;
+  average_processing_time: number;
+  average_image_quality: number;
 }
 
 const CameraPage: React.FC = () => {
@@ -44,22 +55,31 @@ const CameraPage: React.FC = () => {
     total_sessions: 0
   });
 
+  const [faceDetectionStats, setFaceDetectionStats] = useState<FaceDetectionStats>({
+    total_attempts: 0,
+    successful_detections: 0,
+    failed_detections: 0,
+    detection_rate: 0,
+    failure_rate: 0,
+    detection_efficiency: 0,
+    average_processing_time: 0,
+    average_image_quality: 0
+  });
+
   // Load performance stats from database
   const loadPerformanceStats = async () => {
     try {
-      const response = await getPerformanceStats('day');
-      if (response.success && response.detection_metrics) {
-        setDbPerformanceStats({
-          total_analyses: response.detection_metrics.total_analyses || 0,
-          successful_detections: response.detection_metrics.successful_detections || 0,
-          failed_detections: response.detection_metrics.failed_detections || 0,
-          detection_rate: response.detection_metrics.detection_rate || 0,
-          average_image_quality: response.detection_metrics.average_image_quality || 0,
-          average_emotion_score: response.engagement_metrics?.average_emotion_score || 0,
-          average_fps: response.average_fps || 0,
-          average_processing_time: response.average_processing_time || 0,
-          total_sessions: response.total_sessions || 0
-        });
+      const [performanceData, faceDetectionData] = await Promise.all([
+        getPerformanceStats('day'),
+        getFaceDetectionStats('day')
+      ]);
+      
+      if (performanceData.success) {
+        setDbPerformanceStats(performanceData);
+      }
+      
+      if (faceDetectionData.success) {
+        setFaceDetectionStats(faceDetectionData);
       }
     } catch (error) {
       console.error('Error loading performance stats:', error);
@@ -229,27 +249,9 @@ const CameraPage: React.FC = () => {
       if (data.session_id && !currentSessionId) {
         setCurrentSessionId(data.session_id);
       }
-      // Cập nhật thống kê hiệu suất
-      if (data.analysis?.processing_time) {
-        setDbPerformanceStats(prev => {
-          const newTotalTime = prev.average_processing_time * prev.total_analyses + data.analysis!.processing_time;
-          const newTotalAnalyses = prev.total_analyses + 1;
-          const newAvgTime = newTotalTime / newTotalAnalyses;
-          const newAvgFPS = 1000 / newAvgTime;
-          
-          return {
-            average_processing_time: newAvgTime,
-            average_fps: newAvgFPS,
-            detection_rate: prev.detection_rate,
-            total_analyses: newTotalAnalyses,
-            successful_detections: prev.successful_detections,
-            failed_detections: prev.failed_detections,
-            average_image_quality: prev.average_image_quality,
-            average_emotion_score: prev.average_emotion_score,
-            total_sessions: prev.total_sessions
-          };
-        });
-      }
+      
+      // Refresh thống kê từ database sau mỗi lần phân tích
+      await loadPerformanceStats();
       
       // Đếm số kết quả đã lưu
       if (data.analysis?.faces_detected && data.analysis.faces_detected > 0) {
@@ -265,11 +267,6 @@ const CameraPage: React.FC = () => {
           message.info('Không phát hiện khuôn mặt. Hãy đảm bảo khuôn mặt rõ ràng và đủ ánh sáng.', 2);
         }
       }
-      
-      // Cập nhật tỷ lệ phát hiện
-      const total = totalAnalysisCount + 1;
-      const detected = total - noFaceCount;
-      setDetectionRate((detected / total) * 100);
       
     } catch (error) {
       console.error('Lỗi khi gọi API analyzeEmotion:', error);
@@ -313,27 +310,8 @@ const CameraPage: React.FC = () => {
         setCurrentSessionId(data.session_id);
       }
       
-      // Cập nhật thống kê hiệu suất
-      if (data.analysis?.processing_time) {
-        setDbPerformanceStats(prev => {
-          const newTotalTime = prev.average_processing_time * prev.total_analyses + data.analysis!.processing_time;
-          const newTotalAnalyses = prev.total_analyses + 1;
-          const newAvgTime = newTotalTime / newTotalAnalyses;
-          const newAvgFPS = 1000 / newAvgTime;
-          
-          return {
-            average_processing_time: newAvgTime,
-            average_fps: newAvgFPS,
-            detection_rate: prev.detection_rate,
-            total_analyses: newTotalAnalyses,
-            successful_detections: prev.successful_detections,
-            failed_detections: prev.failed_detections,
-            average_image_quality: prev.average_image_quality,
-            average_emotion_score: prev.average_emotion_score,
-            total_sessions: prev.total_sessions
-          };
-        });
-      }
+      // Refresh thống kê từ database sau mỗi lần phân tích
+      await loadPerformanceStats();
       
       if (data.analysis?.faces_detected && data.analysis.faces_detected > 0) {
         message.success(`Phát hiện ${data.analysis.faces_detected} khuôn mặt và đã lưu vào database! (${data.analysis.processing_time}ms)`);
@@ -342,11 +320,6 @@ const CameraPage: React.FC = () => {
         message.warning('Không phát hiện khuôn mặt. Hãy đảm bảo khuôn mặt rõ ràng và đủ ánh sáng.');
         setNoFaceCount(prev => prev + 1);
       }
-      
-      // Cập nhật tỷ lệ phát hiện
-      const total = totalAnalysisCount + 1;
-      const detected = total - noFaceCount;
-      setDetectionRate((detected / total) * 100);
       
     } catch (error: any) {
       console.error('Analysis error:', error);
@@ -391,7 +364,7 @@ const CameraPage: React.FC = () => {
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic
               title="Tỷ lệ phát hiện"
-              value={dbPerformanceStats.detection_rate || 0}
+              value={faceDetectionStats.detection_rate || dbPerformanceStats.detection_rate || 0}
               suffix="%"
               precision={1}
               valueStyle={{ fontSize: '16px' }}
@@ -510,20 +483,24 @@ const CameraPage: React.FC = () => {
             <Card title="Thống kê" size="small" style={{ flex: 1 }}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Row justify="space-between">
-                  <Text strong>Khuôn mặt đã lưu:</Text>
-                  <Text>{savedCount}</Text>
+                  <Text strong>Tổng phân tích:</Text>
+                  <Text>{faceDetectionStats.total_attempts || dbPerformanceStats.total_analyses || 0}</Text>
                 </Row>
                 <Row justify="space-between">
-                  <Text strong>Lần phân tích:</Text>
-                  <Text>{totalAnalysisCount}</Text>
+                  <Text strong>Phát hiện thành công:</Text>
+                  <Text style={{ color: '#52c41a' }}>{faceDetectionStats.successful_detections || dbPerformanceStats.successful_detections || 0}</Text>
                 </Row>
                 <Row justify="space-between">
                   <Text strong>Không phát hiện:</Text>
-                  <Text>{noFaceCount}</Text>
+                  <Text style={{ color: '#ff4d4f' }}>{faceDetectionStats.failed_detections || dbPerformanceStats.failed_detections || 0}</Text>
+                </Row>
+                <Row justify="space-between">
+                  <Text strong>Tỷ lệ thất bại:</Text>
+                  <Text style={{ color: '#ff4d4f' }}>{(faceDetectionStats.failure_rate || 0).toFixed(1)}%</Text>
                 </Row>
                 <Progress
-                  percent={detectionRate}
-                  status={detectionRate > 80 ? 'success' : detectionRate > 50 ? 'normal' : 'exception'}
+                  percent={faceDetectionStats.detection_rate || dbPerformanceStats.detection_rate || 0}
+                  status={(faceDetectionStats.detection_rate || dbPerformanceStats.detection_rate || 0) > 80 ? 'success' : (faceDetectionStats.detection_rate || dbPerformanceStats.detection_rate || 0) > 50 ? 'normal' : 'exception'}
                   format={(percent) => `${percent?.toFixed(1)}%`}
                   size="small"
                 />

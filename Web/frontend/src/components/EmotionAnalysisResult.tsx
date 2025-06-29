@@ -42,6 +42,21 @@ const EmotionAnalysisResult: React.FC<EmotionAnalysisResultProps> = ({ result })
     );
   }
 
+  // Kiểm tra nếu không phát hiện được khuôn mặt
+  if (result.faces_detected === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '20px', color: '#ff4d4f' }}>
+        <FrownOutlined style={{ fontSize: '24px', marginBottom: '8px' }} />
+        <br />
+        <Text type="danger" strong>Không phát hiện được khuôn mặt</Text>
+        <br />
+        <Text type="secondary" style={{ fontSize: '12px' }}>
+          Vui lòng điều chỉnh vị trí hoặc ánh sáng
+        </Text>
+      </div>
+    );
+  }
+
   const getEngagementColor = (engagement: string) => {
     switch (engagement) {
       case 'Rất tích cực': return 'green';

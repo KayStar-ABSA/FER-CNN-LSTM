@@ -36,14 +36,7 @@ async def analyze_emotion(
         # Phân tích cảm xúc
         analysis_result = emotion_service.analyze_emotion(image)
         
-        if not analysis_result.get('success', False):
-            return {
-                "success": False,
-                "error": analysis_result.get('error', 'Lỗi phân tích cảm xúc'),
-                "faces_detected": analysis_result.get('faces_detected', 0)
-            }
-        
-        # Lưu kết quả vào database
+        # Lưu kết quả vào database (cả thành công và thất bại)
         saved_result = emotion_service.save_emotion_result(db, current_user.id, analysis_result)
         
         # Session management đơn giản
@@ -84,23 +77,34 @@ async def analyze_emotion(
             print(f"Session creation error: {e}")
             session_id = None
         
-        return {
-            "success": True,
-            "analysis": {
-                "dominant_emotion": analysis_result['dominant_emotion'],
-                "dominant_emotion_vn": analysis_result['dominant_emotion_vn'],
-                "dominant_emotion_score": analysis_result['dominant_emotion_score'],
-                "emotions_scores": analysis_result['emotions_scores'],
-                "emotions_scores_vn": analysis_result['emotions_scores_vn'],
-                "engagement": analysis_result['engagement'],
-                "faces_detected": analysis_result['faces_detected'],
-                "image_quality": analysis_result.get('image_quality', 0.5),
-                "processing_time": analysis_result['processing_time'],
-                "confidence_level": analysis_result.get('confidence_level', 0.0)
-            },
-            "saved_result": saved_result,
-            "session_id": session_id
-        }
+        # Trả về kết quả dựa trên success
+        if analysis_result.get('success', False):
+            return {
+                "success": True,
+                "analysis": {
+                    "dominant_emotion": analysis_result['dominant_emotion'],
+                    "dominant_emotion_vn": analysis_result['dominant_emotion_vn'],
+                    "dominant_emotion_score": analysis_result['dominant_emotion_score'],
+                    "emotions_scores": analysis_result['emotions_scores'],
+                    "emotions_scores_vn": analysis_result['emotions_scores_vn'],
+                    "engagement": analysis_result['engagement'],
+                    "faces_detected": analysis_result['faces_detected'],
+                    "image_quality": analysis_result.get('image_quality', 0.5),
+                    "processing_time": analysis_result['processing_time'],
+                    "confidence_level": analysis_result.get('confidence_level', 0.0)
+                },
+                "saved_result": saved_result,
+                "session_id": session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": analysis_result.get('error', 'Lỗi phân tích cảm xúc'),
+                "faces_detected": analysis_result.get('faces_detected', 0),
+                "processing_time": analysis_result.get('processing_time', 0),
+                "saved_result": saved_result,
+                "session_id": session_id
+            }
         
     except HTTPException:
         raise
@@ -185,4 +189,21 @@ async def get_performance_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi lấy thống kê hiệu suất: {str(e)}"
+        )
+
+@router.get("/face-detection-stats")
+async def get_face_detection_stats(
+    period: str = "day",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """Lấy thống kê chi tiết về phát hiện khuôn mặt"""
+    try:
+        result = StatsService.get_face_detection_stats(db, current_user.id, period)
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi lấy thống kê phát hiện khuôn mặt: {str(e)}"
         ) 

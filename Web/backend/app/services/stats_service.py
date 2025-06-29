@@ -67,6 +67,42 @@ class StatsService:
             }
     
     @staticmethod
+    def get_face_detection_stats(db: Session, user_id: int, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê chi tiết về phát hiện khuôn mặt"""
+        try:
+            from app.crud.emotion_crud import get_real_performance_stats
+            real_stats = get_real_performance_stats(db, user_id, period)
+            
+            # Tính thêm các chỉ số
+            total_attempts = real_stats['total_analyses']
+            successful_detections = real_stats['successful_detections']
+            failed_detections = real_stats['failed_detections']
+            
+            # Tính tỷ lệ thất bại
+            failure_rate = (failed_detections / total_attempts * 100) if total_attempts > 0 else 0
+            
+            # Tính hiệu quả phát hiện
+            detection_efficiency = (successful_detections / total_attempts * 100) if total_attempts > 0 else 0
+            
+            return {
+                'success': True,
+                'total_attempts': total_attempts,
+                'successful_detections': successful_detections,
+                'failed_detections': failed_detections,
+                'detection_rate': real_stats['detection_rate'],
+                'failure_rate': failure_rate,
+                'detection_efficiency': detection_efficiency,
+                'average_processing_time': real_stats['average_processing_time'],
+                'average_image_quality': real_stats['average_image_quality']
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê phát hiện khuôn mặt: {str(e)}'
+            }
+    
+    @staticmethod
     def get_emotion_history_data(db: Session, user_id: int, limit: int = 100) -> Dict[str, Any]:
         """Lấy dữ liệu lịch sử cảm xúc"""
         try:
