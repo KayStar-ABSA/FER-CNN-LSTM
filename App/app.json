@@ -21,7 +21,9 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.App",
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -59,6 +61,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1c15f6d7-164f-4866-9c04-37dde445e24b"
+      }
     }
   }
 }

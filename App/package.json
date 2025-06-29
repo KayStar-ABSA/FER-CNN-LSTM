@@ -6,7 +6,7 @@
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
-    "build:android": "eas build --profile development --platform android --local"
+    "build:android": "eas build --profile development --platform android"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -48,5 +48,6 @@
     "eslint-config-expo": "~9.2.0",
     "typescript": "~5.8.3"
   },
-  "private": true
+  "private": true,
+  "packageManager": "yarn@1.22.22"
 }
