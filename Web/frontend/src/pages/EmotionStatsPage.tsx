@@ -41,15 +41,51 @@ interface UserSession {
   analysis_interval: number | null;
 }
 
+interface User {
+  id: number;
+  username: string;
+  is_admin: boolean;
+}
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B6B'];
 
 const EmotionStatsPage: React.FC = () => {
   const [period, setPeriod] = useState('day');
+  const [selectedUserId, setSelectedUserId] = useState<number | 'all'>('all');
   const [emotionStats, setEmotionStats] = useState<EmotionStats>({});
   const [detectionStats, setDetectionStats] = useState<DetectionStats | null>(null);
   const [engagementStats, setEngagementStats] = useState<EngagementStats | null>(null);
   const [userSessions, setUserSessions] = useState<UserSession[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Kiểm tra quyền admin
+  useEffect(() => {
+    const adminStatus = localStorage.getItem('is_admin') === 'true';
+    setIsAdmin(adminStatus);
+    if (!adminStatus) {
+      setSelectedUserId('all'); // User thường chỉ xem dữ liệu của mình
+    }
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
 
   const fetchStats = async () => {
     setLoading(true);
@@ -60,37 +96,73 @@ const EmotionStatsPage: React.FC = () => {
         return;
       }
 
-      const [emotionResponse, detectionResponse, engagementResponse, sessionsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/stats/${period}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/detection-stats/${period}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/engagement-stats/${period}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/user-sessions`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      ]);
+      let emotionResponse, detectionResponse, engagementResponse;
 
-      if (emotionResponse.ok) {
-        const emotionData = await emotionResponse.json();
-        setEmotionStats(emotionData);
-        console.log('Emotion stats:', emotionData);
+      if (selectedUserId === 'all') {
+        // Lấy thống kê tổng hợp cho admin hoặc thống kê cá nhân cho user thường
+        if (isAdmin) {
+          [emotionResponse, detectionResponse, engagementResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/admin/stats/${period}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch(`${API_BASE_URL}/detection-stats/${period}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch(`${API_BASE_URL}/engagement-stats/${period}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+          ]);
+        } else {
+          // User thường xem thống kê của mình
+          [emotionResponse, detectionResponse, engagementResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/stats/${period}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch(`${API_BASE_URL}/detection-stats/${period}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch(`${API_BASE_URL}/engagement-stats/${period}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+          ]);
+        }
+      } else {
+        // Lấy thống kê của user cụ thể (chỉ admin mới có thể làm điều này)
+        const userStatsResponse = await fetch(`${API_BASE_URL}/admin/user-stats/${selectedUserId}/${period}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (userStatsResponse.ok) {
+          const userStatsData = await userStatsResponse.json();
+          setEmotionStats(userStatsData.emotion_stats);
+          setDetectionStats(userStatsData.detection_stats);
+          setEngagementStats(userStatsData.engagement_stats);
+        }
       }
 
-      if (detectionResponse.ok) {
-        const detectionData = await detectionResponse.json();
-        setDetectionStats(detectionData);
-        console.log('Detection stats:', detectionData);
-      }
+      // Lấy sessions (chỉ cho user hiện tại)
+      const sessionsResponse = await fetch(`${API_BASE_URL}/user-sessions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-      if (engagementResponse.ok) {
-        const engagementData = await engagementResponse.json();
-        setEngagementStats(engagementData);
-        console.log('Engagement stats:', engagementData);
+      if (selectedUserId === 'all') {
+        if (emotionResponse?.ok) {
+          const emotionData = await emotionResponse.json();
+          setEmotionStats(emotionData);
+          console.log('Emotion stats:', emotionData);
+        }
+
+        if (detectionResponse?.ok) {
+          const detectionData = await detectionResponse.json();
+          setDetectionStats(detectionData);
+          console.log('Detection stats:', detectionData);
+        }
+
+        if (engagementResponse?.ok) {
+          const engagementData = await engagementResponse.json();
+          setEngagementStats(engagementData);
+          console.log('Engagement stats:', engagementData);
+        }
       }
 
       if (sessionsResponse.ok) {
@@ -107,8 +179,12 @@ const EmotionStatsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
     fetchStats();
-  }, [period]);
+  }, [period, selectedUserId]);
 
   const emotionData = Object.entries(emotionStats).map(([emotion, count]) => ({
     name: emotion,
@@ -209,12 +285,29 @@ const EmotionStatsPage: React.FC = () => {
       <Card style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)', borderRadius: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <Title level={3}>Thống kê cảm xúc</Title>
-          <Select value={period} onChange={setPeriod} style={{ width: 120 }}>
-            <Option value="day">Hôm nay</Option>
-            <Option value="week">Tuần này</Option>
-            <Option value="month">Tháng này</Option>
-            <Option value="year">Năm nay</Option>
-          </Select>
+          <Space>
+            {isAdmin && (
+              <Select 
+                value={selectedUserId} 
+                onChange={setSelectedUserId} 
+                style={{ width: 200 }}
+                placeholder="Chọn người dùng"
+              >
+                <Option value="all">Tất cả người dùng</Option>
+                {users.map(user => (
+                  <Option key={user.id} value={user.id}>
+                    {user.username} {user.is_admin ? '(Admin)' : ''}
+                  </Option>
+                ))}
+              </Select>
+            )}
+            <Select value={period} onChange={setPeriod} style={{ width: 120 }}>
+              <Option value="day">Hôm nay</Option>
+              <Option value="week">Tuần này</Option>
+              <Option value="month">Tháng này</Option>
+              <Option value="year">Năm nay</Option>
+            </Select>
+          </Space>
         </div>
 
         {loading ? (
@@ -274,8 +367,8 @@ const EmotionStatsPage: React.FC = () => {
               </Col>
             </Row>
 
-            {/* Xếp hạng cảm xúc tích cực/tiêu cực */}
-            <Row gutter={16} style={{ marginBottom: 24 }}>
+            {/* Thống kê phân loại cảm xúc */}
+            <Row gutter={24} style={{ marginBottom: 24 }}>
               <Col span={8}>
                 <Card title="Cảm xúc tích cực" style={{ textAlign: 'center' }}>
                   <Statistic
@@ -325,84 +418,6 @@ const EmotionStatsPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                </Card>
-              </Col>
-            </Row>
-
-            {/* Biểu đồ cảm xúc */}
-            <Row gutter={24} style={{ marginBottom: 24 }}>
-              <Col span={12}>
-                <Card title="Phân bố cảm xúc (Pie Chart)" style={{ height: 400 }}>
-                  {emotionData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={emotionData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${formatEmotion(name)} ${(percent ? percent * 100 : 0).toFixed(2)}%`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {emotionData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={getEmotionColor(entry.name)} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value, name) => [value, formatEmotion(name as string)]} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '50px' }}>
-                      <Text type="secondary">Chưa có dữ liệu cảm xúc</Text>
-                      <div style={{ marginTop: 16 }}>
-                        <Text type="secondary">Hãy vào trang Camera để phân tích cảm xúc</Text>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              </Col>
-              <Col span={12}>
-                <Card title="Top cảm xúc (Bar Chart)" style={{ height: 400 }}>
-                  {emotionData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={emotionData.slice(0, 5)}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" tickFormatter={formatEmotion} />
-                        <YAxis />
-                        <Tooltip formatter={(value, name) => [value, 'Số lần']} />
-                        <Bar dataKey="value" fill="#8884d8" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '50px' }}>
-                      <Text type="secondary">Chưa có dữ liệu</Text>
-                    </div>
-                  )}
-                </Card>
-              </Col>
-            </Row>
-
-            {/* Biểu đồ radar cảm xúc */}
-            <Row gutter={24} style={{ marginBottom: 24 }}>
-              <Col span={24}>
-                <Card title="Biểu đồ radar cảm xúc" style={{ height: 400 }}>
-                  {emotionData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <RadarChart data={emotionData}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="name" tickFormatter={formatEmotion} />
-                        <PolarRadiusAxis />
-                        <Radar name="Số lần" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
-                        <Tooltip formatter={(value, name) => [value, formatEmotion(name as string)]} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '50px' }}>
-                      <Text type="secondary">Chưa có dữ liệu</Text>
-                    </div>
-                  )}
                 </Card>
               </Col>
             </Row>

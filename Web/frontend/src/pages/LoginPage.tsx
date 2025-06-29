@@ -24,7 +24,7 @@ const LoginPage: React.FC = () => {
       if (res.ok) {
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('is_admin', data.is_admin);
-        navigate(data.is_admin ? '/admin' : '/dashboard');
+        navigate('/dashboard');
       } else {
         setError(data.detail || 'Login failed');
       }

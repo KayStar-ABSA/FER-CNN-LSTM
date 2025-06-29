@@ -20,7 +20,6 @@ const menuItems = [
 ];
 
 const adminMenu = [
-  { key: '/admin', icon: <BarChartOutlined />, label: 'Thống kê tổng hợp' },
   { key: '/admin/users', icon: <UserOutlined />, label: 'Quản lý người dùng' },
 ];
 

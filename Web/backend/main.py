@@ -109,6 +109,46 @@ def get_admin_stats(period: str, current_user: models.User = Depends(auth.get_cu
     stats = crud.get_all_emotion_stats(db, period=period)
     return stats
 
+@app.get("/admin/user-stats/{user_id}/{period}")
+def get_user_stats_by_admin(user_id: int, period: str, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(database.get_db)):
+    """Admin xem thống kê của một user cụ thể"""
+    # Kiểm tra user có tồn tại không
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Lấy thống kê cảm xúc
+    emotion_stats = crud.get_emotion_stats(db, user_id=user_id, period=period)
+    detection_stats = crud.get_detection_stats(db, user_id=user_id, period=period)
+    engagement_stats = crud.get_engagement_stats(db, user_id=user_id, period=period)
+    
+    return {
+        "user": {"id": user.id, "username": user.username, "is_admin": user.is_admin},
+        "emotion_stats": emotion_stats,
+        "detection_stats": detection_stats,
+        "engagement_stats": engagement_stats
+    }
+
+@app.get("/admin/all-users-stats/{period}")
+def get_all_users_stats(period: str, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(database.get_db)):
+    """Admin xem thống kê tổng hợp của tất cả users"""
+    users = crud.get_all_users(db)
+    all_stats = []
+    
+    for user in users:
+        emotion_stats = crud.get_emotion_stats(db, user_id=user.id, period=period)
+        detection_stats = crud.get_detection_stats(db, user_id=user.id, period=period)
+        engagement_stats = crud.get_engagement_stats(db, user_id=user.id, period=period)
+        
+        all_stats.append({
+            "user": {"id": user.id, "username": user.username, "is_admin": user.is_admin},
+            "emotion_stats": emotion_stats,
+            "detection_stats": detection_stats,
+            "engagement_stats": engagement_stats
+        })
+    
+    return all_stats
+
 @app.get("/admin/users")
 def get_all_users(current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(database.get_db)):
     users = crud.get_all_users(db)

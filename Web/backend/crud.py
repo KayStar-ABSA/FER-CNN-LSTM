@@ -16,6 +16,9 @@ def create_user(db: Session, username: str, password: str, is_admin: bool = Fals
 def get_user_by_username(db: Session, username: str):
     return db.query(models.User).filter(models.User.username == username).first()
 
+def get_user_by_id(db: Session, user_id: int):
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
 def create_emotion_result(db: Session, user_id: int, emotion: str, score: float = None, 
                          faces_detected: int = 0, dominant_emotion: str = None, 
                          dominant_emotion_vn: str = None, dominant_emotion_score: float = None,
