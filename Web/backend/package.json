@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "start:mac": "python3.8 -m venv venv && source venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+  }
+}
