@@ -1,14 +1,34 @@
+import React from "react";
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+
+// Khai báo kiểu cho global variables
+declare global {
+  var token: string;
+  var isAdmin: boolean;
+  var username: string;
+}
+
+function AppContent() {
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        gestureEnabled: false,
+      }}
+    />
+  );
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -24,11 +44,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
+        <AuthProvider>
+          <AppContent />
+          <StatusBar style="auto" />
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
