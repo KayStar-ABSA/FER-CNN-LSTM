@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 import cv2
 import numpy as np
@@ -12,26 +12,45 @@ from typing import Dict, Any
 import io
 from datetime import datetime
 from app.core.utils import get_json_filters, extract_common_filters
+import base64
 
 router = APIRouter(prefix="/emotion", tags=["Emotion Analysis"])
 
+class EmotionAnalyzeRequest:
+    def __init__(self, image_base64: str):
+        self.image_base64 = image_base64
+
 @router.post("/analyze")
 async def analyze_emotion(
-    file: UploadFile = File(...),
+    request_data: Dict[str, str],
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Phân tích cảm xúc từ ảnh"""
+    """Phân tích cảm xúc từ ảnh base64"""
     try:
-        # Đọc file ảnh
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # Decode base64 image
+        image_base64 = request_data.get('image_base64')
+        if not image_base64:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Không tìm thấy dữ liệu ảnh base64"
+            )
+            
+        # Convert base64 to image
+        try:
+            img_data = base64.b64decode(image_base64)
+            nparr = np.frombuffer(img_data, np.uint8)
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Không thể decode ảnh base64: {str(e)}"
+            )
         
         if image is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể đọc file ảnh"
+                detail="Không thể đọc dữ liệu ảnh"
             )
         
         # Phân tích cảm xúc

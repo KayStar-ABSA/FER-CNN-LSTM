@@ -109,17 +109,16 @@ export const changePassword = (currentPassword: string, newPassword: string) => 
 };
 
 // Emotion API calls
-export const analyzeEmotion = async (file: File) => {
+export const analyzeEmotion = async (imageBase64: string) => {
   const token = localStorage.getItem('token');
-  const formData = new FormData();
-  formData.append('file', file);
 
   const response = await fetch(`${API_BASE_URL}/emotion/analyze`, {
     method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
     },
-    body: formData,
+    body: JSON.stringify({ image_base64: imageBase64 }),
   });
 
   if (!response.ok) {

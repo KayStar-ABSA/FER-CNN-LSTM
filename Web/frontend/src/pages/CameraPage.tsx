@@ -245,13 +245,9 @@ const CameraPage: React.FC = () => {
     const canvasHeight = 480;
     ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
     try {
-      const blob = await new Promise<Blob>((resolve) => {
-        canvasRef.current!.toBlob((blob) => {
-          resolve(blob!);
-        }, 'image/jpeg', 0.8);
-      });
-      const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
-      const data = await analyzeEmotion(file);
+      const canvas = canvasRef.current!;
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+      const data = await analyzeEmotion(imageBase64);
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       if (data.session_id && !currentSessionId) {
@@ -298,18 +294,9 @@ const CameraPage: React.FC = () => {
     
     setLoading(true);
     try {
-      // Convert canvas to blob
-      const blob = await new Promise<Blob>((resolve) => {
-        canvasRef.current!.toBlob((blob) => {
-          resolve(blob!);
-        }, 'image/jpeg', 0.8);
-      });
-      
-      // Create file from blob
-      const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
-      
-      const data = await analyzeEmotion(file);
-      
+      const canvas = canvasRef.current!;
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+      const data = await analyzeEmotion(imageBase64);
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       
