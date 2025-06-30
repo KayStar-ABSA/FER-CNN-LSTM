@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.auth import create_access_token, get_current_user
@@ -11,15 +12,28 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+# Pydantic models for request bodies
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 @router.post("/login")
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: LoginRequest,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Đăng nhập user"""
     try:
         # Xác thực user
-        user_data = UserService.authenticate_user(db, form_data.username, form_data.password)
+        user_data = UserService.authenticate_user(db, login_data.username, login_data.password)
         
         if not user_data:
             raise HTTPException(
@@ -48,13 +62,12 @@ async def login(
 
 @router.post("/register")
 async def register(
-    username: str,
-    password: str,
+    register_data: RegisterRequest,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Đăng ký user mới"""
     try:
-        result = UserService.create_user(db, username, password, is_admin=False)
+        result = UserService.create_user(db, register_data.username, register_data.password, is_admin=False)
         
         if not result['success']:
             raise HTTPException(
@@ -102,15 +115,14 @@ async def get_current_user_info(
 
 @router.post("/change-password")
 async def change_password(
-    current_password: str,
-    new_password: str,
+    password_data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Đổi mật khẩu"""
     try:
         # Xác thực mật khẩu hiện tại
-        user_data = UserService.authenticate_user(db, current_user.username, current_password)
+        user_data = UserService.authenticate_user(db, current_user.username, password_data.current_password)
         
         if not user_data:
             raise HTTPException(
@@ -119,7 +131,7 @@ async def change_password(
             )
         
         # Cập nhật mật khẩu mới
-        result = UserService.update_user_password(db, current_user.id, new_password)
+        result = UserService.update_user_password(db, current_user.id, password_data.new_password)
         
         if not result['success']:
             raise HTTPException(

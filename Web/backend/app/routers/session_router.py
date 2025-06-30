@@ -1,40 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.models import User
 from app.services.session_service import SessionService
 from app.core.utils import get_json_config
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 router = APIRouter(prefix="/sessions", tags=["Analysis Sessions"])
 
+class SessionStartRequest(BaseModel):
+    cameraResolution: Optional[str] = None
+    analysisInterval: Optional[int] = None
+    detectionThreshold: Optional[float] = Field(default=0.8)
+    enabledEmotions: Optional[List[str]] = Field(default=[])
+    maxSessionDuration: Optional[int] = Field(default=3600)
+
 @router.post("/start")
 async def start_analysis_session(
-    request: Request,
+    config: SessionStartRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Bắt đầu phiên phân tích mới với JSON config"""
     try:
-        # Lấy config từ JSON parameter
-        config = get_json_config(request)
-        
-        # Extract các config parameters
-        camera_resolution = config.get('cameraResolution')
-        analysis_interval = config.get('analysisInterval')
-        detection_threshold = config.get('detectionThreshold', 0.8)
-        enabled_emotions = config.get('enabledEmotions', [])
-        max_session_duration = config.get('maxSessionDuration', 3600)  # 1 hour default
-        
         result = SessionService.create_session(
             db, 
             current_user.id, 
-            camera_resolution, 
-            analysis_interval,
-            detection_threshold=detection_threshold,
-            enabled_emotions=enabled_emotions,
-            max_session_duration=max_session_duration
+            config.cameraResolution, 
+            config.analysisInterval,
+            detection_threshold=config.detectionThreshold,
+            enabled_emotions=config.enabledEmotions,
+            max_session_duration=config.maxSessionDuration
         )
         
         if not result['success']:
@@ -45,11 +43,11 @@ async def start_analysis_session(
         
         # Thêm thông tin config đã sử dụng
         result['applied_config'] = {
-            'camera_resolution': camera_resolution,
-            'analysis_interval': analysis_interval,
-            'detection_threshold': detection_threshold,
-            'enabled_emotions': enabled_emotions,
-            'max_session_duration': max_session_duration
+            'camera_resolution': config.cameraResolution,
+            'analysis_interval': config.analysisInterval,
+            'detection_threshold': config.detectionThreshold,
+            'enabled_emotions': config.enabledEmotions,
+            'max_session_duration': config.maxSessionDuration
         }
         
         return result

@@ -77,25 +77,11 @@ export const apiCall = async (endpoint: string, options: RequestInit = {}) => {
 };
 
 // Auth API calls
-export const login = async (formData: LoginFormData): Promise<LoginResponse> => {
-  const body = new URLSearchParams();
-  body.append('username', formData.username);
-  body.append('password', formData.password);
-
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+export const login = (formData: LoginFormData): Promise<LoginResponse> => {
+  return apiCall('/auth/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
+    body: JSON.stringify(formData),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Login failed');
-  }
-
-  return response.json();
 };
 
 export const register = async (userData: RegisterFormData) => {
@@ -171,9 +157,9 @@ export const getStatsSummary = () => {
 
 // Session API calls
 export const startAnalysisSession = (config: any = {}) => {
-  const queryString = JSON.stringify(config);
-  return apiCall(`/sessions/start?config=${encodeURIComponent(queryString)}`, {
+  return apiCall('/sessions/start', {
     method: 'POST',
+    body: JSON.stringify(config),
   });
 };
 
