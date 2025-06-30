@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.orm import Session
 import cv2
 import numpy as np
@@ -11,6 +11,7 @@ from app.crud.session_crud import create_session, update_session, get_session_by
 from typing import Dict, Any
 import io
 from datetime import datetime
+from app.core.utils import get_json_filters, extract_common_filters
 
 router = APIRouter(prefix="/emotion", tags=["Emotion Analysis"])
 
@@ -176,13 +177,34 @@ async def get_emotion_history(
 
 @router.get("/performance")
 async def get_performance_stats(
-    period: str = "day",
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Lấy thống kê hiệu suất phân tích"""
+    """Lấy thống kê hiệu suất phân tích với JSON filters"""
     try:
-        result = StatsService.get_user_performance_stats(db, current_user.id, period)
+        # Lấy filters từ JSON parameter
+        filters = get_json_filters(request)
+        common_filters = extract_common_filters(filters)
+        
+        # Extract các filters cụ thể cho performance stats
+        period = common_filters.get('period', 'day')
+        user_id = common_filters.get('user_id', current_user.id)
+        include_details = common_filters.get('include_details', False)
+        
+        # Nếu user_id là 'all' hoặc không có user_id cụ thể, lấy tổng hợp
+        if user_id == 'all' or user_id is None:
+            result = StatsService.get_all_users_performance_stats(db, period)
+        else:
+            result = StatsService.get_user_performance_stats(db, user_id, period)
+        
+        # Thêm thông tin filters đã sử dụng
+        result['applied_filters'] = {
+            'period': period,
+            'user_id': user_id,
+            'include_details': include_details
+        }
+        
         return result
         
     except Exception as e:
@@ -193,13 +215,34 @@ async def get_performance_stats(
 
 @router.get("/face-detection-stats")
 async def get_face_detection_stats(
-    period: str = "day",
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Lấy thống kê chi tiết về phát hiện khuôn mặt"""
+    """Lấy thống kê chi tiết về phát hiện khuôn mặt với JSON filters"""
     try:
-        result = StatsService.get_face_detection_stats(db, current_user.id, period)
+        # Lấy filters từ JSON parameter
+        filters = get_json_filters(request)
+        common_filters = extract_common_filters(filters)
+        
+        # Extract các filters cụ thể cho face detection stats
+        period = common_filters.get('period', 'day')
+        user_id = common_filters.get('user_id', current_user.id)
+        include_details = common_filters.get('include_details', False)
+        
+        # Nếu user_id là 'all' hoặc không có user_id cụ thể, lấy tổng hợp
+        if user_id == 'all' or user_id is None:
+            result = StatsService.get_all_users_face_detection_stats(db, period)
+        else:
+            result = StatsService.get_face_detection_stats(db, user_id, period)
+        
+        # Thêm thông tin filters đã sử dụng
+        result['applied_filters'] = {
+            'period': period,
+            'user_id': user_id,
+            'include_details': include_details
+        }
+        
         return result
         
     except Exception as e:

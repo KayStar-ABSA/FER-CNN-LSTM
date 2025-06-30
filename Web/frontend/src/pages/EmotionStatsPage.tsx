@@ -30,12 +30,16 @@ const EmotionStatsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Kiểm tra quyền admin
   useEffect(() => {
     const adminStatus = localStorage.getItem('is_admin') === 'true';
     setIsAdmin(adminStatus);
-    if (!adminStatus) {
-      setSelectedUserId('all'); // User thường chỉ xem dữ liệu của mình
+    // Admin xem tổng hợp, user thường xem dữ liệu của mình
+    if (adminStatus) {
+      setSelectedUserId('all');
+    } else {
+      // User thường lấy user_id của mình từ localStorage
+      const currentUserId = localStorage.getItem('user_id');
+      setSelectedUserId(currentUserId ? parseInt(currentUserId) : 1);
     }
   }, []);
 
@@ -51,90 +55,118 @@ const EmotionStatsPage: React.FC = () => {
     }
   };
 
-  const fetchStats = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      if (selectedUserId === 'all') {
-        // Lấy thống kê tổng hợp cho admin hoặc thống kê cá nhân cho user thường
-        if (isAdmin) {
-          // Admin stats - using the new API structure
-          const [emotionData, performanceData] = await Promise.all([
-            getEmotionStats(filters.period),
-            getPerformanceStats(filters.period)
-          ]);
-          
-          // Xử lý response từ emotion API
-          const emotionStatsData = emotionData.emotion_stats || {};
-          setEmotionStats(emotionStatsData);
-          
-          // Xử lý response từ performance API
-          const detectionStatsData = performanceData.detection_metrics || {};
-          setDetectionStats({
-            total_analyses: detectionStatsData.total_analyses || performanceData.total_analyses || 0,
-            successful_detections: detectionStatsData.successful_detections || performanceData.successful_detections || 0,
-            failed_detections: detectionStatsData.failed_detections || performanceData.failed_detections || 0,
-            detection_rate: detectionStatsData.detection_rate || performanceData.detection_rate || 0,
-            average_image_quality: detectionStatsData.average_image_quality || performanceData.average_image_quality || 0
-          });
-          
-          const engagementStatsData = performanceData.engagement_metrics || {};
-          setEngagementStats({
-            average_emotion_score: engagementStatsData.average_emotion_score || 0,
-            total_emotions_analyzed: engagementStatsData.total_emotions_analyzed || 0
-          });
-        } else {
-          // User thường xem thống kê của mình
-          const [emotionData, performanceData] = await Promise.all([
-            getEmotionStats(filters.period),
-            getPerformanceStats(filters.period)
-          ]);
-          
-          // Xử lý response từ emotion API
-          const emotionStatsData = emotionData.emotion_stats || {};
-          setEmotionStats(emotionStatsData);
-          
-          // Xử lý response từ performance API
-          const detectionStatsData = performanceData.detection_metrics || {};
-          setDetectionStats({
-            total_analyses: detectionStatsData.total_analyses || performanceData.total_analyses || 0,
-            successful_detections: detectionStatsData.successful_detections || performanceData.successful_detections || 0,
-            failed_detections: detectionStatsData.failed_detections || performanceData.failed_detections || 0,
-            detection_rate: detectionStatsData.detection_rate || performanceData.detection_rate || 0,
-            average_image_quality: detectionStatsData.average_image_quality || performanceData.average_image_quality || 0
-          });
-          
-          const engagementStatsData = performanceData.engagement_metrics || {};
-          setEngagementStats({
-            average_emotion_score: engagementStatsData.average_emotion_score || 0,
-            total_emotions_analyzed: engagementStatsData.total_emotions_analyzed || 0
-          });
-        }
-      } else {
-        // Lấy thống kê của user cụ thể (chỉ admin mới có thể làm điều này)
-        // This would need to be implemented in the backend
-        message.warning('Tính năng xem thống kê user cụ thể chưa được hỗ trợ');
-      }
+      if (isAdmin) {
+        // Admin có thể chọn xem dữ liệu của user cụ thể hoặc tổng hợp
+        const emotionFilters = {
+          period: filters.period,
+          userId: selectedUserId,  // Có thể là 'all' hoặc user_id cụ thể
+          includeDetails: true,
+          emotions: ['happy', 'sad', 'angry', 'neutral', 'surprise', 'fear', 'disgust']
+        };
+        
+        const performanceFilters = {
+          period: filters.period,
+          userId: selectedUserId,  // Có thể là 'all' hoặc user_id cụ thể
+          includeDetails: true
+        };
+        
+        const [emotionData, performanceData] = await Promise.all([
+          getEmotionStats(emotionFilters),
+          getPerformanceStats(performanceFilters)
+        ]);
+        
+        // Xử lý response từ emotion API
+        const emotionStatsData = emotionData.emotion_stats || {};
+        setEmotionStats(emotionStatsData);
+        
+        // Xử lý response từ performance API
+        const detectionStatsData = performanceData.detection_metrics || {};
+        setDetectionStats({
+          total_analyses: detectionStatsData.total_analyses || performanceData.total_analyses || 0,
+          successful_detections: detectionStatsData.successful_detections || performanceData.successful_detections || 0,
+          failed_detections: detectionStatsData.failed_detections || performanceData.failed_detections || 0,
+          detection_rate: detectionStatsData.detection_rate || performanceData.detection_rate || 0,
+          average_image_quality: detectionStatsData.average_image_quality || performanceData.average_image_quality || 0
+        });
+        
+        const engagementStatsData = performanceData.engagement_metrics || {};
+        setEngagementStats({
+          average_emotion_score: engagementStatsData.average_emotion_score || 0,
+          total_emotions_analyzed: engagementStatsData.total_emotions_analyzed || 0
+        });
 
-      // Lấy lịch sử phân tích
-      const historyData = await getEmotionHistory(100);
-      // Chuyển đổi dữ liệu từ emotion history sang user sessions format
-      const sessionsData = (historyData.history || []).map((item: any, index: number) => ({
-        id: index + 1,
-        session_start: item.timestamp || new Date().toISOString(),
-        session_end: null,
-        total_analyses: 1,
-        successful_detections: 1, // Nếu có dữ liệu thì đã phát hiện thành công
-        failed_detections: 0,
-        detection_rate: 100, // Nếu có dữ liệu thì tỷ lệ phát hiện 100%
-        emotions_summary: { [item.emotion]: 1 },
-        average_engagement: item.score || 0,
-        camera_resolution: "640x480",
-        analysis_interval: 200
-      }));
-      setUserSessions(sessionsData);
+        // Lấy lịch sử phân tích với JSON filters
+        const historyFilters: any = {
+          limit: 100,
+          includeDetails: true,
+          userId: selectedUserId  // Admin truyền selectedUserId
+        };
+        
+        const historyData = await getEmotionHistory(historyFilters);
+        // Chuyển đổi dữ liệu từ emotion history sang user sessions format
+        const sessionsData = (historyData.history || []).map((item: any, index: number) => ({
+          id: index + 1,
+          session_start: item.timestamp || new Date().toISOString(),
+          session_end: null,
+          total_analyses: 1,
+          successful_detections: 1, // Nếu có dữ liệu thì đã phát hiện thành công
+          failed_detections: 0,
+          detection_rate: 100, // Nếu có dữ liệu thì tỷ lệ phát hiện 100%
+          emotions_summary: { [item.emotion]: 1 },
+          average_engagement: item.score || 0,
+          camera_resolution: "640x480",
+          analysis_interval: 200
+        }));
+        setUserSessions(sessionsData);
+      } else {
+        // User thường xem thống kê của mình (không truyền userId)
+        const [emotionData, performanceData] = await Promise.all([
+          getEmotionStats(filters.period),
+          getPerformanceStats(filters.period)
+        ]);
+        
+        // Xử lý response từ emotion API
+        const emotionStatsData = emotionData.emotion_stats || {};
+        setEmotionStats(emotionStatsData);
+        
+        // Xử lý response từ performance API
+        const detectionStatsData = performanceData.detection_metrics || {};
+        setDetectionStats({
+          total_analyses: detectionStatsData.total_analyses || performanceData.total_analyses || 0,
+          successful_detections: detectionStatsData.successful_detections || performanceData.successful_detections || 0,
+          failed_detections: detectionStatsData.failed_detections || performanceData.failed_detections || 0,
+          detection_rate: detectionStatsData.detection_rate || performanceData.detection_rate || 0,
+          average_image_quality: detectionStatsData.average_image_quality || performanceData.average_image_quality || 0
+        });
+        
+        const engagementStatsData = performanceData.engagement_metrics || {};
+        setEngagementStats({
+          average_emotion_score: engagementStatsData.average_emotion_score || 0,
+          total_emotions_analyzed: engagementStatsData.total_emotions_analyzed || 0
+        });
+
+        // User thường lấy lịch sử của mình (không truyền userId)
+        const historyData = await getEmotionHistory({ limit: 100 });
+        // Chuyển đổi dữ liệu từ emotion history sang user sessions format
+        const sessionsData = (historyData.history || []).map((item: any, index: number) => ({
+          id: index + 1,
+          session_start: item.timestamp || new Date().toISOString(),
+          session_end: null,
+          total_analyses: 1,
+          successful_detections: 1, // Nếu có dữ liệu thì đã phát hiện thành công
+          failed_detections: 0,
+          detection_rate: 100, // Nếu có dữ liệu thì tỷ lệ phát hiện 100%
+          emotions_summary: { [item.emotion]: 1 },
+          average_engagement: item.score || 0,
+          camera_resolution: "640x480",
+          analysis_interval: 200
+        }));
+        setUserSessions(sessionsData);
+      }
       
-      // Không override detection stats từ performance API nữa
-      // Chỉ sử dụng dữ liệu từ performance API để đảm bảo tính nhất quán
     } catch (error) {
       console.error('Error fetching stats:', error);
       message.error('Lỗi khi tải thống kê');
@@ -148,8 +180,11 @@ const EmotionStatsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchStats();
-  }, [filters.period, selectedUserId, fetchStats]);
+    // Chỉ fetch khi cả isAdmin và selectedUserId đã được set
+    if (isAdmin !== undefined && selectedUserId !== undefined) {
+      fetchData();
+    }
+  }, [isAdmin, selectedUserId, fetchData]);
 
   const handleFilterChange = (newFilters: FilterOptions) => {
     setFilters(newFilters);

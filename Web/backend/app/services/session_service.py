@@ -9,8 +9,9 @@ class SessionService:
     
     @staticmethod
     def create_session(db: Session, user_id: int, camera_resolution: str = None, 
-                      analysis_interval: float = None) -> Dict[str, Any]:
-        """Tạo phiên phân tích mới"""
+                      analysis_interval: float = None, detection_threshold: float = 0.8,
+                      enabled_emotions: List[str] = None, max_session_duration: int = 3600) -> Dict[str, Any]:
+        """Tạo phiên phân tích mới với config mở rộng"""
         try:
             # Kiểm tra xem user có phiên đang hoạt động không
             active_session = get_active_session_by_user_id(db, user_id)
@@ -20,8 +21,26 @@ class SessionService:
                     'error': 'User đã có phiên phân tích đang hoạt động'
                 }
             
-            # Tạo phiên mới
+            # Validate parameters
+            if detection_threshold < 0 or detection_threshold > 1:
+                detection_threshold = 0.8
+            
+            if max_session_duration < 60 or max_session_duration > 86400:  # 1 minute to 24 hours
+                max_session_duration = 3600
+            
+            if enabled_emotions is None:
+                enabled_emotions = []
+            
+            # Tạo phiên mới với config mở rộng
             session = create_session(db, user_id, camera_resolution, analysis_interval)
+            
+            # Cập nhật thêm các config mới vào session (nếu model hỗ trợ)
+            # TODO: Cần cập nhật model để lưu thêm các config này
+            # update_session_config(db, session.id, {
+            #     'detection_threshold': detection_threshold,
+            #     'enabled_emotions': enabled_emotions,
+            #     'max_session_duration': max_session_duration
+            # })
             
             # Log việc tạo session
             SystemLogService.log_session_start(db, user_id, session.id, camera_resolution or "unknown")
@@ -33,7 +52,12 @@ class SessionService:
                     'user_id': session.user_id,
                     'session_start': session.session_start.isoformat(),
                     'camera_resolution': session.camera_resolution,
-                    'analysis_interval': session.analysis_interval
+                    'analysis_interval': session.analysis_interval,
+                    'config': {
+                        'detection_threshold': detection_threshold,
+                        'enabled_emotions': enabled_emotions,
+                        'max_session_duration': max_session_duration
+                    }
                 }
             }
             

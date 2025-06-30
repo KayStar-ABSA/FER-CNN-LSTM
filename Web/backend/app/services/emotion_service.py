@@ -1,11 +1,9 @@
 from sqlalchemy.orm import Session
 from app.models.models import EmotionResult
 from app.crud.emotion_crud import create_emotion_result, update_emotion_result
-import numpy as np
 from PIL import Image
 import base64
 from io import BytesIO
-import cv2
 import json
 from typing import Dict, Any, Optional, Tuple
 import time
@@ -25,11 +23,18 @@ class EmotionService:
         self.emotion_labels = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
         self.emotion_labels_vn = ['Giận dữ', 'Ghê tởm', 'Sợ hãi', 'Vui vẻ', 'Buồn bã', 'Ngạc nhiên', 'Bình thường']
         self.emotion_translations = dict(zip(self.emotion_labels, self.emotion_labels_vn))
-        self._load_models()
+        self._models_loaded = False
         
     def _load_models(self):
-        """Load các model cần thiết"""
+        """Load các model cần thiết - lazy loading"""
+        if self._models_loaded:
+            return
+            
         try:
+            # Lazy import heavy libraries
+            import cv2
+            import numpy as np
+            
             # Load face cascade
             self.face_cascade = cv2.CascadeClassifier(settings.CASCADE_PATH)
             if self.face_cascade.empty():
@@ -45,15 +50,23 @@ class EmotionService:
             self.model = model_from_json(json.dumps(model_config))
             self.model.load_weights(settings.MODEL_WEIGHTS_PATH)
             
+            self._models_loaded = True
             logger.info("Models loaded successfully")
             
         except Exception as e:
             logger.error(f"Lỗi load models: {e}")
             raise
     
-    def preprocess_image(self, image: np.ndarray) -> Tuple[np.ndarray, float]:
+    def preprocess_image(self, image):
         """Tiền xử lý ảnh"""
+        # Ensure models are loaded
+        self._load_models()
+        
         start_time = time.time()
+        
+        # Lazy import
+        import cv2
+        import numpy as np
         
         # Chuyển sang grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -84,11 +97,17 @@ class EmotionService:
         processing_time = time.time() - start_time
         return face_roi, processing_time
     
-    def analyze_emotion(self, image: np.ndarray) -> Dict[str, Any]:
+    def analyze_emotion(self, image):
         """Phân tích cảm xúc từ ảnh"""
+        # Ensure models are loaded
+        self._load_models()
+        
         start_time = time.time()
         
         try:
+            # Lazy import
+            import numpy as np
+            
             # Tiền xử lý ảnh
             processed_face, preprocess_time = self.preprocess_image(image)
             
@@ -156,9 +175,12 @@ class EmotionService:
         else:
             return "low"
     
-    def _assess_image_quality(self, image: np.ndarray) -> float:
+    def _assess_image_quality(self, image):
         """Đánh giá chất lượng ảnh"""
         try:
+            # Lazy import
+            import cv2
+            
             # Chuyển sang grayscale
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             

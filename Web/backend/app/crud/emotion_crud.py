@@ -179,4 +179,88 @@ def get_real_performance_stats(db: Session, user_id: int, period: str = 'day'):
         'average_fps': average_fps,
         'average_processing_time': average_processing_time,
         'total_sessions': len(sessions)
-    } 
+    }
+
+def get_all_users_performance_stats(db: Session, period: str = 'day'):
+    """Lấy thống kê hiệu suất tổng hợp của tất cả users"""
+    now = datetime.utcnow()
+    if period == 'day':
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == 'week':
+        start = now - timedelta(days=now.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == 'month':
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == 'year':
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start = None
+    
+    # Lấy thống kê từ EmotionResult cho tất cả users
+    emotion_query = db.query(EmotionResult)
+    if start:
+        emotion_query = emotion_query.filter(EmotionResult.timestamp >= start)
+    
+    emotion_results = emotion_query.all()
+    
+    # Lấy thống kê từ AnalysisSession cho tất cả users
+    session_query = db.query(AnalysisSession)
+    if start:
+        session_query = session_query.filter(AnalysisSession.session_start >= start)
+    
+    sessions = session_query.all()
+    
+    # Tính toán thống kê tổng hợp
+    total_analyses = len(emotion_results)
+    successful_detections = len([r for r in emotion_results if r.faces_detected > 0])
+    failed_detections = total_analyses - successful_detections
+    detection_rate = (successful_detections / total_analyses * 100) if total_analyses > 0 else 0
+    
+    # Tính chất lượng ảnh trung bình (chỉ từ những lần thành công)
+    successful_results = [r for r in emotion_results if r.faces_detected > 0]
+    image_qualities = [r.image_quality for r in successful_results if r.image_quality is not None]
+    average_image_quality = (sum(image_qualities) / len(image_qualities) * 100) if image_qualities else 0
+    
+    # Tính độ tương tác trung bình (chỉ từ những lần thành công)
+    scores = [r.score for r in successful_results if r.score is not None and r.score > 0]
+    average_emotion_score = (sum(scores) / len(scores) * 100) if scores else 0
+    
+    # Tính FPS trung bình từ sessions
+    fps_values = [s.avg_fps for s in sessions if s.avg_fps is not None]
+    average_fps = sum(fps_values) / len(fps_values) if fps_values else 0
+    
+    # Tính thời gian xử lý trung bình (từ tất cả các lần phân tích)
+    processing_times = [r.processing_time for r in emotion_results if r.processing_time is not None]
+    average_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
+    
+    return {
+        'total_analyses': total_analyses,
+        'successful_detections': successful_detections,
+        'failed_detections': failed_detections,
+        'detection_rate': detection_rate,
+        'average_image_quality': average_image_quality,
+        'average_emotion_score': average_emotion_score,
+        'average_fps': average_fps,
+        'average_processing_time': average_processing_time,
+        'total_sessions': len(sessions)
+    }
+
+def get_all_users_emotion_history(db: Session, limit: int = 100):
+    """Lấy lịch sử phân tích cảm xúc tổng hợp của tất cả users"""
+    results = db.query(EmotionResult).filter(
+        EmotionResult.faces_detected > 0,
+        EmotionResult.emotion != 'no_face_detected'  # Loại trừ những lần không phát hiện khuôn mặt
+    ).order_by(EmotionResult.timestamp.desc()).limit(limit).all()
+    
+    return [
+        {
+            "id": result.id,
+            "user_id": result.user_id,  # Thêm user_id để phân biệt
+            "emotion": result.emotion,
+            "score": result.score,
+            "timestamp": result.timestamp,
+            "image_quality": result.image_quality,
+            "processing_time": result.processing_time
+        }
+        for result in results
+    ] 

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Progress, Table, Tag, Space, Typography, Spin } from 'antd';
+import { Card, Row, Col, Statistic, Progress, Table, Tag, Space, Typography, Spin, Select } from 'antd';
 import { LineChartOutlined, ThunderboltOutlined, ClockCircleOutlined, EyeOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import { getPerformanceStats, getFaceDetectionStats } from '../utils/api';
+import { getPerformanceStats, getFaceDetectionStats, getUsers } from '../utils/api';
+import { User } from '../types/user';
 
 const { Title, Text } = Typography;
+const { Option } = Select;
 
 interface PerformanceStats {
   total_analyses: number;
@@ -32,32 +34,97 @@ const PerformanceReportPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [performanceStats, setPerformanceStats] = useState<PerformanceStats | null>(null);
   const [faceDetectionStats, setFaceDetectionStats] = useState<FaceDetectionStats | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | 'all'>('all');
+  const [users, setUsers] = useState<User[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    loadStats();
+    const adminStatus = localStorage.getItem('is_admin') === 'true';
+    setIsAdmin(adminStatus);
+    // Admin xem tổng hợp, user thường xem dữ liệu của mình
+    if (adminStatus) {
+      setSelectedUserId('all');
+      fetchUsers();
+    } else {
+      // User thường lấy user_id của mình từ localStorage
+      const currentUserId = localStorage.getItem('user_id');
+      setSelectedUserId(currentUserId ? parseInt(currentUserId) : 1);
+    }
   }, []);
 
-  const loadStats = async () => {
+  const fetchUsers = async () => {
     try {
-      setLoading(true);
-      const [performanceData, faceDetectionData] = await Promise.all([
-        getPerformanceStats('day'),
-        getFaceDetectionStats('day')
-      ]);
-      
-      if (performanceData.success) {
-        setPerformanceStats(performanceData);
-      }
-      
-      if (faceDetectionData.success) {
-        setFaceDetectionStats(faceDetectionData);
+      const data = await getUsers();
+      // Handle the backend response structure: { success: true, users: [...], total_count: ... }
+      const usersArray = Array.isArray(data) ? data : data?.users || [];
+      setUsers(usersArray);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setUsers([]); // Set empty array on error
+    }
+  };
+
+  const loadStats = async () => {
+    setLoading(true);
+    try {
+      if (isAdmin) {
+        // Admin có thể chọn xem dữ liệu của user cụ thể hoặc tổng hợp
+        const filters = {
+          period: 'day',
+          userId: selectedUserId,  // Có thể là 'all' hoặc user_id cụ thể
+          includeDetails: true
+        };
+        
+        const data = await getPerformanceStats(filters);
+        setPerformanceStats(data);
+        
+        // Tính toán face detection stats từ performance data
+        const faceStats: FaceDetectionStats = {
+          total_attempts: data.total_analyses || 0,
+          successful_detections: data.successful_detections || 0,
+          failed_detections: data.failed_detections || 0,
+          detection_rate: data.detection_rate || 0,
+          failure_rate: data.failed_detections && data.total_analyses ? 
+            (data.failed_detections / data.total_analyses) * 100 : 0,
+          detection_efficiency: data.detection_rate || 0,
+          average_processing_time: data.average_processing_time || 0,
+          average_image_quality: data.average_image_quality || 0
+        };
+        setFaceDetectionStats(faceStats);
+      } else {
+        // User thường chỉ xem dữ liệu của chính mình
+        const data = await getPerformanceStats('day');
+        setPerformanceStats(data);
+        
+        // Tính toán face detection stats từ performance data
+        const faceStats: FaceDetectionStats = {
+          total_attempts: data.total_analyses || 0,
+          successful_detections: data.successful_detections || 0,
+          failed_detections: data.failed_detections || 0,
+          detection_rate: data.detection_rate || 0,
+          failure_rate: data.failed_detections && data.total_analyses ? 
+            (data.failed_detections / data.total_analyses) * 100 : 0,
+          detection_efficiency: data.detection_rate || 0,
+          average_processing_time: data.average_processing_time || 0,
+          average_image_quality: data.average_image_quality || 0
+        };
+        setFaceDetectionStats(faceStats);
       }
     } catch (error) {
       console.error('Error loading performance stats:', error);
+      setPerformanceStats(null);
+      setFaceDetectionStats(null);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Chỉ load khi cả isAdmin và selectedUserId đã được set
+    if (isAdmin !== undefined && selectedUserId !== undefined) {
+      loadStats();
+    }
+  }, [isAdmin, selectedUserId]);
 
   const getProgressStatus = (value: number, type: string) => {
     switch (type) {
@@ -97,12 +164,39 @@ const PerformanceReportPage: React.FC = () => {
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ marginBottom: '24px' }}>
-        <Title level={2} style={{ marginBottom: '8px' }}>
-          <LineChartOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
-          Báo Cáo Hiệu Suất Hệ Thống
-        </Title>
+        <Row justify="space-between" align="middle" style={{ marginBottom: '8px' }}>
+          <Col>
+            <Title level={2} style={{ margin: 0 }}>
+              <LineChartOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+              Báo Cáo Hiệu Suất Hệ Thống
+            </Title>
+          </Col>
+          {isAdmin && (
+            <Col>
+              <Select
+                value={selectedUserId}
+                onChange={setSelectedUserId}
+                style={{ width: 200 }}
+                placeholder="Chọn người dùng"
+              >
+                <Option value="all">Tất cả người dùng</Option>
+                {users.map(user => (
+                  <Option key={user.id} value={user.id}>
+                    {user.username}
+                  </Option>
+                ))}
+              </Select>
+            </Col>
+          )}
+        </Row>
         <Text type="secondary">
           Thống kê chi tiết về hiệu suất nhận diện cảm xúc và tối ưu hóa hệ thống
+          {isAdmin && selectedUserId === 'all' && (
+            <span> - Dữ liệu tổng hợp từ tất cả người dùng</span>
+          )}
+          {isAdmin && selectedUserId !== 'all' && (
+            <span> - Người dùng: {users.find(u => u.id === selectedUserId)?.username}</span>
+          )}
         </Text>
       </div>
 

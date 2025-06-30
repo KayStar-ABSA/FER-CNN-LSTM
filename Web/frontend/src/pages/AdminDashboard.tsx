@@ -50,17 +50,22 @@ const AdminDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [allUsersStats, setAllUsersStats] = useState<UserStats[]>([]);
   const [currentStats, setCurrentStats] = useState<AdminStats>({});
+  const [currentPerformanceData, setCurrentPerformanceData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [performanceData, setPerformanceData] = useState<any>(null);
 
-  // Kiểm tra quyền admin
   useEffect(() => {
     const adminStatus = localStorage.getItem('is_admin') === 'true';
     setIsAdmin(adminStatus);
-    if (!adminStatus) {
-      setSelectedUserId('all'); // User thường chỉ xem dữ liệu của mình
+    // Admin xem tổng hợp, user thường xem dữ liệu của mình
+    if (adminStatus) {
+      setSelectedUserId('all');
+    } else {
+      // User thường lấy user_id của mình từ localStorage
+      const currentUserId = localStorage.getItem('user_id');
+      setSelectedUserId(currentUserId ? parseInt(currentUserId) : 1);
     }
   }, []);
 
@@ -69,9 +74,21 @@ const AdminDashboard: React.FC = () => {
     try {
       if (isAdmin) {
         // Admin lấy thống kê tổng hợp và danh sách users
+        const emotionFilters = {
+          period: period,
+          userId: selectedUserId,  // Lấy đúng theo selectedUserId
+          includeDetails: true
+        };
+        
+        const performanceFilters = {
+          period: period,
+          userId: selectedUserId,  // Lấy đúng theo selectedUserId
+          includeDetails: true
+        };
+        
         const [emotionData, performanceData, usersData] = await Promise.all([
-          getEmotionStats(period),
-          getPerformanceStats(period),
+          getEmotionStats(emotionFilters),
+          getPerformanceStats(performanceFilters),
           getUsers()
         ]);
         
@@ -89,6 +106,7 @@ const AdminDashboard: React.FC = () => {
         const usersArray = Array.isArray(usersData) ? usersData : usersData?.users || [];
         setUsers(usersArray);
         setCurrentStats(combinedStats); // Mặc định hiển thị tất cả
+        setCurrentPerformanceData(performanceData); // Mặc định hiển thị tất cả
       } else {
         // User thường lấy thống kê của chính mình
         const [emotionData, performanceData] = await Promise.all([
@@ -104,7 +122,7 @@ const AdminDashboard: React.FC = () => {
         };
         
         setCurrentStats(combinedStats);
-        setPerformanceData(performanceData);
+        setCurrentPerformanceData(performanceData);
         setAdminStats(combinedStats); // Để tương thích với logic hiện tại
         setUsers([]); // User thường không cần danh sách users
       }
@@ -114,27 +132,39 @@ const AdminDashboard: React.FC = () => {
       setUsers([]);
       setAdminStats({});
       setCurrentStats({});
+      setCurrentPerformanceData(null);
       setPerformanceData(null);
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, period]);
+  }, [isAdmin, period, selectedUserId]);
 
   const fetchAllUsersStats = useCallback(async () => {
     setStatsLoading(true);
     try {
-      // This would need to be implemented in the backend
-      // For now, we'll use the current user's stats
+      // Lấy thống kê tổng hợp cho tất cả users
+      const emotionFilters = {
+        period: period,
+        userId: 'all',  // Lấy tổng hợp
+        includeDetails: true
+      };
+      
+      const performanceFilters = {
+        period: period,
+        userId: 'all',  // Lấy tổng hợp
+        includeDetails: true
+      };
+      
       const [emotionData, performanceData] = await Promise.all([
-        getEmotionStats(period),
-        getPerformanceStats(period)
+        getEmotionStats(emotionFilters),
+        getPerformanceStats(performanceFilters)
       ]);
       
-      // Use current user's stats as placeholder
-      const currentUserStats: UserStats[] = [{
+      // Tạo placeholder stats cho tất cả users (sử dụng dữ liệu tổng hợp)
+      const allUsersStats: UserStats[] = [{
         user: {
-          id: 1,
-          username: localStorage.getItem('username') || 'Current User',
+          id: 0,
+          username: 'Tất cả người dùng',
           is_admin: false,
           created_at: new Date().toISOString()
         },
@@ -148,11 +178,11 @@ const AdminDashboard: React.FC = () => {
         },
         engagement_stats: {
           average_emotion_score: performanceData.average_emotion_score || 0,
-          total_emotions_analyzed: performanceData.total_emotions_analyzed || 0
+          total_emotions_analyzed: performanceData.total_analyses || 0
         }
       }];
       
-      setAllUsersStats(currentUserStats);
+      setAllUsersStats(allUsersStats);
     } catch (error) {
       console.error('Error fetching all users stats:', error);
       setAllUsersStats([]);
@@ -163,40 +193,59 @@ const AdminDashboard: React.FC = () => {
 
   const fetchUserStats = useCallback(async (userId: number) => {
     try {
-      // This would need to be implemented in the backend
-      // For now, we'll use the current user's stats
+      // Lấy stats của user cụ thể
+      const emotionFilters = {
+        period: period,
+        userId: userId,
+        includeDetails: true
+      };
+      
+      const performanceFilters = {
+        period: period,
+        userId: userId,
+        includeDetails: true
+      };
+      
       const [emotionData, performanceData] = await Promise.all([
-        getEmotionStats(period),
-        getPerformanceStats(period)
+        getEmotionStats(emotionFilters),
+        getPerformanceStats(performanceFilters)
       ]);
       
       const combinedStats = {
-        ...emotionData.emotion_stats,
+        ...(emotionData.emotion_stats || {}),
         total_analyses: performanceData.total_analyses || 0,
         successful_detections: performanceData.successful_detections || 0,
         detection_rate: performanceData.detection_rate || 0
       };
       
       setCurrentStats(combinedStats);
+      setCurrentPerformanceData(performanceData);
     } catch (error) {
       console.error('Error fetching user stats:', error);
+      // Fallback to admin stats if user-specific stats fail
+      setCurrentStats(adminStats);
+      setCurrentPerformanceData(performanceData);
     }
-  }, [period]);
+  }, [period, adminStats, performanceData]);
 
   useEffect(() => {
-    fetchData();
-    if (isAdmin) {
-      fetchAllUsersStats();
+    // Chỉ fetch khi cả isAdmin và selectedUserId đã được set
+    if (isAdmin !== undefined && selectedUserId !== undefined) {
+      fetchData();
+      if (isAdmin) {
+        fetchAllUsersStats();
+      }
     }
-  }, [fetchData, fetchAllUsersStats, isAdmin]);
+  }, [isAdmin, selectedUserId, fetchData, fetchAllUsersStats]);
 
   useEffect(() => {
     if (selectedUserId === 'all') {
       setCurrentStats(adminStats);
+      setCurrentPerformanceData(performanceData);
     } else if (isAdmin) {
       fetchUserStats(selectedUserId);
     }
-  }, [selectedUserId, adminStats, isAdmin, fetchUserStats]);
+  }, [selectedUserId, adminStats, isAdmin, fetchUserStats, performanceData]);
 
   // Tính toán xếp hạng người dùng
   const getUserRankings = () => {
@@ -269,7 +318,7 @@ const AdminDashboard: React.FC = () => {
         <Col span={6}>
           <StatisticCard
             title="Tổng phân tích"
-            value={performanceData?.total_analyses || 0}
+            value={currentPerformanceData?.total_analyses || currentStats?.total_analyses || 0}
             suffix="lần"
             color="#1890ff"
           />
@@ -277,7 +326,7 @@ const AdminDashboard: React.FC = () => {
         <Col span={6}>
           <StatisticCard
             title="Người dùng hoạt động"
-            value={safeUsers.filter(user => !user.is_admin).length}
+            value={selectedUserId === 'all' ? safeUsers.filter(user => !user.is_admin).length : 1}
             suffix="người"
             color="#52c41a"
           />
@@ -285,7 +334,7 @@ const AdminDashboard: React.FC = () => {
         <Col span={6}>
           <StatisticCard
             title="Phát hiện thành công"
-            value={performanceData?.successful_detections || 0}
+            value={currentPerformanceData?.successful_detections || currentStats?.successful_detections || 0}
             suffix="lần"
             color="#faad14"
           />
@@ -293,7 +342,7 @@ const AdminDashboard: React.FC = () => {
         <Col span={6}>
           <StatisticCard
             title="Tỷ lệ thành công"
-            value={performanceData?.detection_rate || 0}
+            value={currentPerformanceData?.detection_rate || currentStats?.detection_rate || 0}
             suffix="%"
             precision={1}
             color="#722ed1"
@@ -471,42 +520,42 @@ const AdminDashboard: React.FC = () => {
               <div style={{ marginBottom: '20px' }}>
                 <Text strong>Tổng số phân tích</Text>
                 <Progress 
-                  percent={performanceData?.total_analyses ? Math.min(100, (performanceData.total_analyses / 200) * 100) : 0} 
+                  percent={currentPerformanceData?.total_analyses ? Math.min(100, (currentPerformanceData.total_analyses / 200) * 100) : 0} 
                   status="active" 
                   style={{ marginTop: '8px' }} 
                   showInfo={false}
                 />
-                <Text type="secondary">{performanceData?.total_analyses || 0} lần</Text>
+                <Text type="secondary">{currentPerformanceData?.total_analyses || 0} lần</Text>
               </div>
               <div style={{ marginBottom: '20px' }}>
                 <Text strong>Tỷ lệ phát hiện</Text>
                 <Progress 
-                  percent={performanceData?.detection_rate || 0} 
+                  percent={currentPerformanceData?.detection_rate || 0} 
                   status="active" 
                   style={{ marginTop: '8px' }} 
                   showInfo={false}
                 />
-                <Text type="secondary">{(performanceData?.detection_rate || 0).toFixed(1)}%</Text>
+                <Text type="secondary">{(currentPerformanceData?.detection_rate || 0).toFixed(1)}%</Text>
               </div>
               <div style={{ marginBottom: '20px' }}>
                 <Text strong>Chất lượng ảnh trung bình</Text>
                 <Progress 
-                  percent={performanceData?.average_image_quality || 0} 
+                  percent={currentPerformanceData?.average_image_quality || 0} 
                   status="active" 
                   style={{ marginTop: '8px' }} 
                   showInfo={false}
                 />
-                <Text type="secondary">{(performanceData?.average_image_quality || 0).toFixed(2)}%</Text>
+                <Text type="secondary">{(currentPerformanceData?.average_image_quality || 0).toFixed(2)}%</Text>
               </div>
               <div>
                 <Text strong>Độ tương tác trung bình</Text>
                 <Progress 
-                  percent={performanceData?.average_emotion_score || 0} 
+                  percent={currentPerformanceData?.average_emotion_score || 0} 
                   status="success" 
                   style={{ marginTop: '8px' }} 
                   showInfo={false}
                 />
-                <Text type="secondary">{(performanceData?.average_emotion_score || 0).toFixed(2)}%</Text>
+                <Text type="secondary">{(currentPerformanceData?.average_emotion_score || 0).toFixed(2)}%</Text>
               </div>
             </div>
           </Card>

@@ -146,4 +146,115 @@ class StatsService:
             return {
                 'success': False,
                 'error': f'Lỗi lấy thống kê dashboard: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_all_users_emotion_stats(db: Session, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê cảm xúc tổng hợp của tất cả users"""
+        try:
+            emotion_stats = get_all_emotion_stats(db, period)
+            
+            return {
+                'success': True,
+                'period': period,
+                'emotion_stats': emotion_stats
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê cảm xúc tổng hợp: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_all_users_performance_stats(db: Session, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê hiệu suất tổng hợp của tất cả users"""
+        try:
+            from app.crud.emotion_crud import get_all_users_performance_stats as get_all_perf_stats
+            all_stats = get_all_perf_stats(db, period)
+            
+            return {
+                'success': True,
+                'period': period,
+                'total_analyses': all_stats['total_analyses'],
+                'successful_detections': all_stats['successful_detections'],
+                'failed_detections': all_stats['failed_detections'],
+                'detection_rate': all_stats['detection_rate'],
+                'average_image_quality': all_stats['average_image_quality'],
+                'average_emotion_score': all_stats['average_emotion_score'],
+                'average_fps': all_stats['average_fps'],
+                'average_processing_time': all_stats['average_processing_time'],
+                'total_sessions': all_stats['total_sessions'],
+                'detection_metrics': {
+                    'total_analyses': all_stats['total_analyses'],
+                    'successful_detections': all_stats['successful_detections'],
+                    'failed_detections': all_stats['failed_detections'],
+                    'detection_rate': all_stats['detection_rate'],
+                    'average_image_quality': all_stats['average_image_quality']
+                },
+                'engagement_metrics': {
+                    'average_emotion_score': all_stats['average_emotion_score'],
+                    'total_emotions_analyzed': all_stats['total_analyses']
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê hiệu suất tổng hợp: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_all_users_face_detection_stats(db: Session, period: str = 'day') -> Dict[str, Any]:
+        """Lấy thống kê phát hiện khuôn mặt tổng hợp của tất cả users"""
+        try:
+            from app.crud.emotion_crud import get_all_users_performance_stats as get_all_perf_stats
+            all_stats = get_all_perf_stats(db, period)
+            
+            # Tính thêm các chỉ số
+            total_attempts = all_stats['total_analyses']
+            successful_detections = all_stats['successful_detections']
+            failed_detections = all_stats['failed_detections']
+            
+            # Tính tỷ lệ thất bại
+            failure_rate = (failed_detections / total_attempts * 100) if total_attempts > 0 else 0
+            
+            # Tính hiệu quả phát hiện
+            detection_efficiency = (successful_detections / total_attempts * 100) if total_attempts > 0 else 0
+            
+            return {
+                'success': True,
+                'total_attempts': total_attempts,
+                'successful_detections': successful_detections,
+                'failed_detections': failed_detections,
+                'detection_rate': all_stats['detection_rate'],
+                'failure_rate': failure_rate,
+                'detection_efficiency': detection_efficiency,
+                'average_processing_time': all_stats['average_processing_time'],
+                'average_image_quality': all_stats['average_image_quality']
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy thống kê phát hiện khuôn mặt tổng hợp: {str(e)}'
+            }
+    
+    @staticmethod
+    def get_all_users_emotion_history_data(db: Session, limit: int = 100) -> Dict[str, Any]:
+        """Lấy dữ liệu lịch sử cảm xúc tổng hợp của tất cả users"""
+        try:
+            from app.crud.emotion_crud import get_all_users_emotion_history
+            history = get_all_users_emotion_history(db, limit)
+            
+            return {
+                'success': True,
+                'history': history,
+                'total_records': len(history)
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Lỗi lấy lịch sử cảm xúc tổng hợp: {str(e)}'
             } 

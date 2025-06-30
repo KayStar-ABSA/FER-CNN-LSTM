@@ -207,9 +207,17 @@ const CameraPage: React.FC = () => {
       return;
     }
     
-    // Tạo session mới khi bắt đầu stream
+    // Tạo session mới khi bắt đầu stream với JSON config
     try {
-      const sessionResult = await startAnalysisSession(cameraResolution, 200);
+      const config = {
+        cameraResolution: cameraResolution,
+        analysisInterval: 200,
+        detectionThreshold: 0.8,
+        enabledEmotions: ['happy', 'sad', 'angry', 'neutral', 'surprise', 'fear', 'disgust'],
+        maxSessionDuration: 3600
+      };
+      
+      const sessionResult = await startAnalysisSession(config);
       if (sessionResult.success) {
         setCurrentSessionId(sessionResult.session.id);
       }

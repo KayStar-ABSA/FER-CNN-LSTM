@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.models import User
 from app.services.admin_service import AdminService
 from app.services.user_service import UserService
+from app.core.utils import get_json_filters, extract_common_filters
 from typing import Dict, Any
 from pydantic import BaseModel, Field
 
@@ -118,13 +119,34 @@ async def delete_user_account(
 
 @router.get("/statistics")
 async def get_system_statistics(
-    period: str = "day",
+    request: Request,
     current_user: User = Depends(verify_admin),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Lấy thống kê hệ thống"""
+    """Lấy thống kê hệ thống với JSON filters"""
     try:
+        # Lấy filters từ JSON parameter
+        filters = get_json_filters(request)
+        common_filters = extract_common_filters(filters)
+        
+        # Extract các filters cụ thể cho admin statistics
+        period = common_filters.get('period', 'day')
+        user_type = filters.get('userType', 'all')
+        include_inactive = filters.get('includeInactive', False)
+        sort_by = filters.get('sortBy', 'created_at')
+        sort_order = filters.get('sortOrder', 'desc')
+        
         result = AdminService.get_system_statistics(db, period)
+        
+        # Thêm thông tin filters đã sử dụng
+        result['applied_filters'] = {
+            'period': period,
+            'user_type': user_type,
+            'include_inactive': include_inactive,
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
+        
         return result
         
     except Exception as e:

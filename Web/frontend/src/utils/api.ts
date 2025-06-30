@@ -1,6 +1,43 @@
 import { API_BASE_URL } from '../constants';
 import { LoginFormData, LoginResponse, RegisterFormData, UserInfoResponse } from '../types';
 
+// Utility function để tạo URL với JSON parameters
+export const createUrlWithJsonParams = (endpoint: string, params: Record<string, any> = {}) => {
+  const url = new URL(`${API_BASE_URL}${endpoint}`);
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      if (typeof value === 'object') {
+        // Nếu là object, stringify và encode
+        url.searchParams.set(key, JSON.stringify(value));
+      } else {
+        // Nếu là primitive value, encode bình thường
+        url.searchParams.set(key, String(value));
+      }
+    }
+  });
+  
+  return url.toString();
+};
+
+// Utility function để parse JSON parameters từ URL
+export const parseJsonParams = (url: string) => {
+  const urlObj = new URL(url);
+  const params: Record<string, any> = {};
+  
+  urlObj.searchParams.forEach((value, key) => {
+    try {
+      // Thử parse JSON trước
+      params[key] = JSON.parse(value);
+    } catch {
+      // Nếu không phải JSON, giữ nguyên giá trị
+      params[key] = value;
+    }
+  });
+  
+  return params;
+};
+
 export const apiCall = async (endpoint: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('token');
   
@@ -107,21 +144,25 @@ export const analyzeEmotion = async (file: File) => {
   return response.json();
 };
 
-// Stats API calls - using actual backend endpoints
-export const getEmotionStats = (period: string = 'day') => {
-  return apiCall(`/stats/emotion?period=${period}`);
+// Stats API calls - using JSON.stringify for backend compatibility
+export const getEmotionStats = (filters: any = {}) => {
+  const queryString = JSON.stringify(filters);
+  return apiCall(`/stats/emotion?filters=${encodeURIComponent(queryString)}`);
 };
 
-export const getEmotionHistory = (limit: number = 100) => {
-  return apiCall(`/stats/history?limit=${limit}`);
+export const getEmotionHistory = (filters: any = {}) => {
+  const queryString = JSON.stringify(filters);
+  return apiCall(`/stats/history?filters=${encodeURIComponent(queryString)}`);
 };
 
-export const getPerformanceStats = (period: string = 'day') => {
-  return apiCall(`/stats/performance?period=${period}`);
+export const getPerformanceStats = (filters: any = {}) => {
+  const queryString = JSON.stringify(filters);
+  return apiCall(`/stats/performance?filters=${encodeURIComponent(queryString)}`);
 };
 
-export const getFaceDetectionStats = (period: string = 'day') => {
-  return apiCall(`/emotion/face-detection-stats?period=${period}`);
+export const getFaceDetectionStats = (filters: any = {}) => {
+  const queryString = JSON.stringify(filters);
+  return apiCall(`/emotion/face-detection-stats?filters=${encodeURIComponent(queryString)}`);
 };
 
 export const getStatsSummary = () => {
@@ -129,12 +170,9 @@ export const getStatsSummary = () => {
 };
 
 // Session API calls
-export const startAnalysisSession = (cameraResolution?: string, analysisInterval?: number) => {
-  const params = new URLSearchParams();
-  if (cameraResolution) params.append('camera_resolution', cameraResolution);
-  if (analysisInterval) params.append('analysis_interval', analysisInterval.toString());
-  
-  return apiCall(`/sessions/start?${params.toString()}`, {
+export const startAnalysisSession = (config: any = {}) => {
+  const queryString = JSON.stringify(config);
+  return apiCall(`/sessions/start?config=${encodeURIComponent(queryString)}`, {
     method: 'POST',
   });
 };
@@ -150,18 +188,25 @@ export const getActiveSession = () => {
 };
 
 // Admin API calls
-export const getAdminStats = (period: string) => apiCall(`/admin/statistics?period=${period}`);
+export const getAdminStats = (filters: any = {}) => {
+  const queryString = JSON.stringify(filters);
+  return apiCall(`/admin/statistics?filters=${encodeURIComponent(queryString)}`);
+};
+
 export const getUsers = () => {
   return apiCall('/admin/users');
 };
+
 export const createUser = (userData: any) => apiCall('/admin/users', {
   method: 'POST',
   body: JSON.stringify(userData),
 });
+
 export const updateUser = (userId: number, userData: any) => apiCall(`/admin/users/${userId}`, {
   method: 'PUT',
   body: JSON.stringify(userData),
 });
+
 export const deleteUser = (userId: number) => apiCall(`/admin/users/${userId}`, {
   method: 'DELETE',
 }); 
