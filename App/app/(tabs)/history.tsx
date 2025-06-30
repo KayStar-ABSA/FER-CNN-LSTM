@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import dayjs from "dayjs";
 import { BASE_API } from "@/constants/endpoinst";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface UserSession {
   id: number;
@@ -48,6 +49,7 @@ const HistoryScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 10; // 2 box mỗi dòng, 5 dòng mỗi trang = 10 box mỗi trang
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -179,45 +181,49 @@ const HistoryScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>Lịch sử phiên phân tích</Text>
-      {loading ? (
-        <ActivityIndicator size="large" style={{ marginTop: 40 }} />
-      ) : error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : (
-        <>
-          {userSessions.length === 0 ? (
-            <Text style={{ textAlign: "center", color: "#aaa" }}>No data</Text>
-          ) : (
-            renderSessionRows()
-          )}
-          {/* Phân trang */}
-          <View style={styles.paginationRow}>
-            <Text
-              style={styles.pageBtn}
-              onPress={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              {"<"}
-            </Text>
-            <Text style={styles.pageNum}>
-              {page} / {totalPages || 1}
-            </Text>
-            <Text
-              style={styles.pageBtn}
-              onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              {">"}
-            </Text>
-          </View>
-        </>
-      )}
-    </ScrollView>
+    <View style={{ marginTop: insets.top }}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.header}>Lịch sử phiên phân tích</Text>
+        {loading ? (
+          <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+        ) : error ? (
+          <Text style={styles.error}>{error}</Text>
+        ) : (
+          <>
+            {userSessions.length === 0 ? (
+              <Text style={{ textAlign: "center", color: "#aaa" }}>
+                No data
+              </Text>
+            ) : (
+              renderSessionRows()
+            )}
+            {/* Phân trang */}
+            <View style={styles.paginationRow}>
+              <Text
+                style={styles.pageBtn}
+                onPress={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                {"<"}
+              </Text>
+              <Text style={styles.pageNum}>
+                {page} / {totalPages || 1}
+              </Text>
+              <Text
+                style={styles.pageBtn}
+                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                {">"}
+              </Text>
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 16 },
+  container: { flexGrow: 1, backgroundColor: "#fff", padding: 16 },
   header: {
     fontSize: 24,
     fontWeight: "bold",

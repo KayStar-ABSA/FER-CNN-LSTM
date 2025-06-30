@@ -122,77 +122,80 @@ const EmotionAnalysisResult: React.FC<{ result: AnalysisResult | null }> = ({
       {!result ? (
         <Text style={{ color: "#888", padding: 8 }}>Chưa có dữ liệu</Text>
       ) : (
-        result.results.map((faceResult, index) => (
-          <View key={index} style={styles.faceResultContainer}>
-            <Text style={styles.faceTitle}>Khuôn mặt {index + 1}</Text>
-            <View style={styles.faceContent}>
-              <View style={styles.faceLeft}>
-                <View style={styles.emotionItem}>
-                  <Text style={styles.emotionLabel}>Cảm xúc chủ đạo:</Text>
-                  <View
-                    style={[styles.emotionTag, { backgroundColor: "#52c41a" }]}
-                  >
-                    <Text style={styles.emotionTagText}>
-                      {faceResult.dominant_emotion_vn} (
-                      {(faceResult.dominant_emotion_score * 100).toFixed(0)}%)
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.emotionItem}>
-                  <Text style={styles.emotionLabel}>Mức độ tham gia:</Text>
-                  <View
-                    style={[
-                      styles.emotionTag,
-                      {
-                        backgroundColor: getEngagementColor(
-                          faceResult.engagement
-                        ),
-                      },
-                    ]}
-                  >
-                    <Text style={styles.emotionTagText}>
-                      {faceResult.engagement}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <View style={styles.faceRight}>
-                <Text style={styles.emotionLabel}>Chi tiết cảm xúc:</Text>
-                {Object.entries(faceResult.emotions_vn)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 3)
-                  .map(([emotion, score]) => (
-                    <View key={emotion} style={styles.emotionDetail}>
-                      <View style={styles.emotionDetailHeader}>
-                        <Text style={styles.emotionDetailText}>{emotion}:</Text>
-                        <Text style={styles.emotionDetailScore}>
-                          {(score * 100).toFixed(0)}%
-                        </Text>
-                      </View>
-                      <View style={styles.progressBar}>
-                        <View
-                          style={[
-                            styles.progressFill,
-                            {
-                              width: `${score * 100}%`,
-                              backgroundColor: getEmotionColor(
-                                emotion,
-                                emotion === faceResult.dominant_emotion_vn
-                              ),
-                            },
-                          ]}
-                        />
-                      </View>
+        <View style={{ marginLeft: -24, padding: 12 }}>
+          {result.results.map((faceResult, index) => (
+            <View key={index} style={styles.faceResultContainer}>
+              <Text style={styles.faceTitle}>Khuôn mặt {index + 1}</Text>
+              <View style={styles.faceContent}>
+                <View style={styles.faceLeft}>
+                  <View style={styles.emotionItem}>
+                    <Text style={styles.emotionLabel}>Cảm xúc chủ đạo:</Text>
+                    <View
+                      style={[
+                        styles.emotionTag,
+                        { backgroundColor: "#52c41a" },
+                      ]}
+                    >
+                      <Text style={styles.emotionTagText}>
+                        {faceResult.dominant_emotion_vn} (
+                        {(faceResult.dominant_emotion_score * 100).toFixed(0)}%)
+                      </Text>
                     </View>
-                  ))}
+                  </View>
+                  <View style={styles.emotionItem}>
+                    <Text style={styles.emotionLabel}>Mức độ tham gia:</Text>
+                    <View
+                      style={[
+                        styles.emotionTag,
+                        {
+                          backgroundColor: getEngagementColor(
+                            faceResult.engagement
+                          ),
+                        },
+                      ]}
+                    >
+                      <Text style={styles.emotionTagText}>
+                        {faceResult.engagement}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.faceRight}>
+                  <Text style={styles.emotionLabel}>Chi tiết cảm xúc:</Text>
+                  {Object.entries(faceResult.emotions_vn)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 3)
+                    .map(([emotion, score]) => (
+                      <View key={emotion} style={styles.emotionDetail}>
+                        <View style={styles.emotionDetailHeader}>
+                          <Text style={styles.emotionDetailText}>
+                            {emotion}:
+                          </Text>
+                          <Text style={styles.emotionDetailScore}>
+                            {(score * 100).toFixed(0)}%
+                          </Text>
+                        </View>
+                        <View style={styles.progressBar}>
+                          <View
+                            style={[
+                              styles.progressFill,
+                              {
+                                width: `${score * 100}%`,
+                                backgroundColor: getEmotionColor(
+                                  emotion,
+                                  emotion === faceResult.dominant_emotion_vn
+                                ),
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    ))}
+                </View>
               </View>
             </View>
-            <Text style={styles.facePosition}>
-              Vị trí: ({faceResult.face_position.x},{" "}
-              {faceResult.face_position.y})
-            </Text>
-          </View>
-        ))
+          ))}
+        </View>
       )}
     </Collapsible>
   );
@@ -393,66 +396,62 @@ export default function App() {
         </View>
 
         {/* Results Section */}
-        <View style={styles.resultsSection}>
-          <View style={styles.resultsCardShadow}>
-            <View style={styles.resultsCard}>
-              <EmotionAnalysisResult
-                result={{
-                  faces_detected: 2,
-                  results: [
-                    {
-                      face_position: {
-                        x: 100,
-                        y: 150,
-                        width: 80,
-                        height: 80,
-                      },
-                      emotions: {
-                        happy: 0.8,
-                        sad: 0.1,
-                        angry: 0.05,
-                      },
-                      dominant_emotion: "happy",
-                      dominant_emotion_vn: "vui",
-                      dominant_emotion_score: 0.8,
-                      engagement: "high",
-                      emotions_vn: {
-                        vui: 0.8,
-                        buon: 0.1,
-                        tuc_gian: 0.05,
-                      },
-                    },
-                    {
-                      face_position: {
-                        x: 300,
-                        y: 200,
-                        width: 75,
-                        height: 75,
-                      },
-                      emotions: {
-                        neutral: 0.7,
-                        surprise: 0.2,
-                      },
-                      dominant_emotion: "neutral",
-                      dominant_emotion_vn: "binh_thuong",
-                      dominant_emotion_score: 0.7,
-                      engagement: "medium",
-                      emotions_vn: {
-                        binh_thuong: 0.7,
-                        bat_ngo: 0.2,
-                      },
-                    },
-                  ],
-                  success: true,
-                  processing_time: 120,
-                  avg_fps: 24.5,
-                  image_size: "1280x720",
-                  cache_hits: 3,
-                  session_id: 42,
-                }}
-              />
-            </View>
-          </View>
+        <View style={styles.resultsCard}>
+          <EmotionAnalysisResult
+            result={{
+              faces_detected: 2,
+              results: [
+                {
+                  face_position: {
+                    x: 100,
+                    y: 150,
+                    width: 80,
+                    height: 80,
+                  },
+                  emotions: {
+                    happy: 0.8,
+                    sad: 0.1,
+                    angry: 0.05,
+                  },
+                  dominant_emotion: "happy",
+                  dominant_emotion_vn: "vui",
+                  dominant_emotion_score: 0.8,
+                  engagement: "high",
+                  emotions_vn: {
+                    vui: 0.8,
+                    buon: 0.1,
+                    tuc_gian: 0.05,
+                  },
+                },
+                {
+                  face_position: {
+                    x: 300,
+                    y: 200,
+                    width: 75,
+                    height: 75,
+                  },
+                  emotions: {
+                    neutral: 0.7,
+                    surprise: 0.2,
+                  },
+                  dominant_emotion: "neutral",
+                  dominant_emotion_vn: "binh_thuong",
+                  dominant_emotion_score: 0.7,
+                  engagement: "medium",
+                  emotions_vn: {
+                    binh_thuong: 0.7,
+                    bat_ngo: 0.2,
+                  },
+                },
+              ],
+              success: true,
+              processing_time: 120,
+              avg_fps: 24.5,
+              image_size: "1280x720",
+              cache_hits: 3,
+              session_id: 42,
+            }}
+          />
         </View>
       </View>
     </View>
@@ -620,6 +619,10 @@ const styles = StyleSheet.create({
   },
   resultsCard: {
     padding: 12,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
   },
   cardTitle: {
     fontSize: 16,
@@ -668,7 +671,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 8,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: "white",
     borderRadius: 4,
     overflow: "hidden",
   },
@@ -677,7 +680,6 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    color: "#666",
     textAlign: "center",
     marginTop: 4,
   },
@@ -722,16 +724,11 @@ const styles = StyleSheet.create({
   },
   faceResultContainer: {
     marginBottom: 12,
-    marginTop: 8,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: "#fafafa",
+    backgroundColor: "#eee",
     width: "100%",
     alignSelf: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
   },
   faceTitle: {
     fontSize: 17,
@@ -745,9 +742,11 @@ const styles = StyleSheet.create({
   faceLeft: {
     flex: 1,
     marginRight: 8,
+    gap: 12,
   },
   faceRight: {
     flex: 1,
+    gap: 12,
   },
   emotionItem: {
     marginBottom: 6,
@@ -766,8 +765,8 @@ const styles = StyleSheet.create({
   },
   emotionTagText: {
     color: "white",
-    fontSize: 15,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "600",
   },
   emotionDetail: {
     marginBottom: 4,
@@ -789,7 +788,8 @@ const styles = StyleSheet.create({
   },
   facePosition: {
     fontSize: 12,
-    color: "#666",
+    color: "black",
     marginTop: 4,
+    fontWeight: "500",
   },
 });

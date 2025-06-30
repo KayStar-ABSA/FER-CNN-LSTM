@@ -1,15 +1,14 @@
+import { BASE_API } from "@/constants/endpoinst";
+import { useAuth } from "@/contexts/AuthContext";
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
-  FlatList,
-  ActivityIndicator,
+  Text,
+  View,
 } from "react-native";
-import { useAuth } from "@/contexts/AuthContext";
-import dayjs from "dayjs";
-import { BASE_API } from "@/constants/endpoinst";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface DetectionStats {
   total_analyses: number;
@@ -69,6 +68,7 @@ const EmotionStatsMobile = () => {
   const [emotionStats, setEmotionStats] = useState<EmotionStats>({});
   const [userSessions, setUserSessions] = useState<UserSession[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -137,166 +137,173 @@ const EmotionStatsMobile = () => {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>Thống kê cảm xúc</Text>
-      {loading ? (
-        <ActivityIndicator size="large" style={{ marginTop: 40 }} />
-      ) : error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : (
-        <>
-          {/* Thẻ số liệu chính */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Tổng phân tích</Text>
-              <Text style={styles.statValue}>
-                {detectionStats?.total_analyses || 0} lần
-              </Text>
+    <View style={{ marginTop: insets.top }}>
+      <ScrollView contentContainerStyle={[styles.container]}>
+        <Text style={styles.header}>Thống kê cảm xúc</Text>
+        {loading ? (
+          <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+        ) : error ? (
+          <Text style={styles.error}>{error}</Text>
+        ) : (
+          <>
+            {/* Thẻ số liệu chính */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Tổng phân tích</Text>
+                <Text style={styles.statValue}>
+                  {detectionStats?.total_analyses || 0} lần
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Phát hiện thành công</Text>
+                <Text style={[styles.statValue, { color: "#3f8600" }]}>
+                  {detectionStats?.successful_detections || 0} lần
+                </Text>
+              </View>
             </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Phát hiện thành công</Text>
-              <Text style={[styles.statValue, { color: "#3f8600" }]}>
-                {detectionStats?.successful_detections || 0} lần
-              </Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Tỷ lệ phát hiện</Text>
+                <Text style={[styles.statValue, { color: "#cf1322" }]}>
+                  {detectionStats?.detection_rate?.toFixed(2) || "0.00"} %
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Chất lượng ảnh TB</Text>
+                <Text style={[styles.statValue, { color: "#1890ff" }]}>
+                  {detectionStats?.average_image_quality?.toFixed(2) || "0.00"}{" "}
+                  %
+                </Text>
+              </View>
             </View>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Tỷ lệ phát hiện</Text>
-              <Text style={[styles.statValue, { color: "#cf1322" }]}>
-                {detectionStats?.detection_rate?.toFixed(2) || "0.00"} %
-              </Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Chất lượng ảnh TB</Text>
-              <Text style={[styles.statValue, { color: "#1890ff" }]}>
-                {detectionStats?.average_image_quality?.toFixed(2) || "0.00"} %
-              </Text>
-            </View>
-          </View>
 
-          {/* Phân loại cảm xúc */}
-          <View style={styles.emotionRow}>
-            <View style={styles.emotionCard}>
-              <Text style={styles.emotionTitle}>Cảm xúc tích cực</Text>
-              <Text style={[styles.emotionTotal, { color: "#52c41a" }]}>
-                Tổng cộng: {totalPositive} lần
-              </Text>
-              {emotionCategories.positive.map(([e, c]) => (
-                <Text
-                  key={e}
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "500",
-                    color: "white",
-                    backgroundColor: emotionColors[e] || "#333",
-                    padding: 8,
-                    borderRadius: 12,
-                    margin: 4,
-                    overflow: "hidden",
-                    alignSelf: "flex-start",
-                  }}
-                >
-                  {emotionLabels[e] || e}: {c}
+            {/* Phân loại cảm xúc */}
+            <View style={styles.emotionRow}>
+              <View style={styles.emotionCard}>
+                <Text style={styles.emotionTitle}>Cảm xúc tích cực</Text>
+                <Text style={[styles.emotionTotal, { color: "#52c41a" }]}>
+                  Tổng cộng: {totalPositive} lần
                 </Text>
-              ))}
-            </View>
-            <View style={styles.emotionCard}>
-              <Text style={styles.emotionTitle}>Cảm xúc tiêu cực</Text>
-              <Text style={[styles.emotionTotal, { color: "#f5222d" }]}>
-                Tổng cộng: {totalNegative} lần
-              </Text>
-              {emotionCategories.negative.map(([e, c]) => (
-                <Text
-                  key={e}
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "500",
-                    color: "white",
-                    backgroundColor: emotionColors[e] || "#333",
-                    padding: 8,
-                    borderRadius: 12,
-                    margin: 4,
-                    overflow: "hidden",
-                    alignSelf: "flex-start",
-                  }}
-                >
-                  {emotionLabels[e] || e}: {c}
+                {emotionCategories.positive.map(([e, c]) => (
+                  <Text
+                    key={e}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "500",
+                      color: "white",
+                      backgroundColor: emotionColors[e] || "#333",
+                      padding: 8,
+                      borderRadius: 12,
+                      margin: 4,
+                      overflow: "hidden",
+                      alignSelf: "flex-start",
+                    }}
+                  >
+                    {emotionLabels[e] || e}: {c}
+                  </Text>
+                ))}
+              </View>
+              <View style={styles.emotionCard}>
+                <Text style={styles.emotionTitle}>Cảm xúc tiêu cực</Text>
+                <Text style={[styles.emotionTotal, { color: "#f5222d" }]}>
+                  Tổng cộng: {totalNegative} lần
                 </Text>
-              ))}
+                {emotionCategories.negative.map(([e, c]) => (
+                  <Text
+                    key={e}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "500",
+                      color: "white",
+                      backgroundColor: emotionColors[e] || "#333",
+                      padding: 8,
+                      borderRadius: 12,
+                      margin: 4,
+                      overflow: "hidden",
+                      alignSelf: "flex-start",
+                    }}
+                  >
+                    {emotionLabels[e] || e}: {c}
+                  </Text>
+                ))}
+              </View>
             </View>
-          </View>
-          <View style={styles.emotionRow}>
-            <View style={styles.emotionCard}>
-              <Text style={styles.emotionTitle}>Cảm xúc trung tính</Text>
-              <Text style={[styles.emotionTotal, { color: "#8c8c8c" }]}>
-                Tổng cộng: {totalNeutral} lần
-              </Text>
-              {emotionCategories.neutral.map(([e, c]) => (
-                <Text
-                  key={e}
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "500",
-                    color: "white",
-                    backgroundColor: emotionColors[e] || "#333",
-                    padding: 8,
-                    borderRadius: 12,
-                    margin: 4,
-                    overflow: "hidden",
-                    alignSelf: "flex-start",
-                  }}
-                >
-                  {emotionLabels[e] || e}: {c}
+            <View style={styles.emotionRow}>
+              <View style={styles.emotionCard}>
+                <Text style={styles.emotionTitle}>Cảm xúc trung tính</Text>
+                <Text style={[styles.emotionTotal, { color: "#8c8c8c" }]}>
+                  Tổng cộng: {totalNeutral} lần
                 </Text>
-              ))}
+                {emotionCategories.neutral.map(([e, c]) => (
+                  <Text
+                    key={e}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "500",
+                      color: "white",
+                      backgroundColor: emotionColors[e] || "#333",
+                      padding: 8,
+                      borderRadius: 12,
+                      margin: 4,
+                      overflow: "hidden",
+                      alignSelf: "flex-start",
+                    }}
+                  >
+                    {emotionLabels[e] || e}: {c}
+                  </Text>
+                ))}
+              </View>
+              <View
+                style={{ flex: 1, margin: 4, backgroundColor: "transparent" }}
+              />
             </View>
+
+            {/* Chi tiết cảm xúc */}
+            <Text style={styles.sectionTitle}>Chi Tiết Cảm Xúc</Text>
             <View
-              style={{ flex: 1, margin: 4, backgroundColor: "transparent" }}
-            />
-          </View>
-
-          {/* Chi tiết cảm xúc */}
-          <Text style={styles.sectionTitle}>Chi Tiết Cảm Xúc</Text>
-          <View
-            style={[
-              styles.detailCard,
-              {
-                flexDirection: "row",
-                flexWrap: "wrap",
-                backgroundColor: "transparent",
-                gap: 4,
-              },
-            ]}
-          >
-            {Object.entries(emotionStats).length === 0 ? (
-              <Text style={{ color: "#aaa" }}>No data</Text>
-            ) : (
-              Object.entries(emotionStats).map(([e, c]) => (
-                <Text
-                  key={e}
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "500",
-                    color: "white",
-                    backgroundColor: emotionColors[e] || "#333",
-                    padding: 8,
-                    borderRadius: 12,
-                  }}
-                >
-                  {emotionLabels[e] || e}: {c} lần
-                </Text>
-              ))
-            )}
-          </View>
-        </>
-      )}
-    </ScrollView>
+              style={[
+                styles.detailCard,
+                {
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  backgroundColor: "transparent",
+                  gap: 4,
+                },
+              ]}
+            >
+              {Object.entries(emotionStats).length === 0 ? (
+                <Text style={{ color: "#aaa" }}>No data</Text>
+              ) : (
+                Object.entries(emotionStats).map(([e, c]) => (
+                  <Text
+                    key={e}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "500",
+                      color: "white",
+                      backgroundColor: emotionColors[e] || "#333",
+                      padding: 8,
+                      borderRadius: 12,
+                    }}
+                  >
+                    {emotionLabels[e] || e}: {c} lần
+                  </Text>
+                ))
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 16 },
+  container: {
+    flexGrow: 1,
+    backgroundColor: "#fff",
+    padding: 16,
+  },
   header: {
     fontSize: 24,
     fontWeight: "bold",
