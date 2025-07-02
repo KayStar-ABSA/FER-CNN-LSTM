@@ -129,6 +129,28 @@ export const analyzeEmotion = async (imageBase64: string) => {
   return response.json();
 };
 
+export const analyzeEmotionRealtime = async (imageBlob: Blob) => {
+  const token = localStorage.getItem('token');
+  const formData = new FormData();
+  formData.append('file', imageBlob, 'frame.jpg');
+
+  const response = await fetch(`${API_BASE_URL}/emotion/analyze-realtime`, {
+    method: 'POST',
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+      // Không đặt Content-Type, để trình duyệt tự set boundary cho multipart
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Realtime analysis failed');
+  }
+
+  return response.json();
+};
+
 // Stats API calls - using JSON.stringify for backend compatibility
 export const getEmotionStats = (filters: any = {}) => {
   const queryString = JSON.stringify(filters);

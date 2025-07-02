@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, File, UploadFile
 from sqlalchemy.orm import Session
 import cv2
 import numpy as np
@@ -268,4 +268,88 @@ async def get_face_detection_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi lấy thống kê phát hiện khuôn mặt: {str(e)}"
+        )
+
+@router.post("/analyze-realtime")
+async def analyze_emotion_realtime(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """Phân tích cảm xúc từ ảnh upload (realtime, không base64)"""
+    import cv2
+    import numpy as np
+    try:
+        contents = await file.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if image is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Không thể đọc dữ liệu ảnh từ file upload"
+            )
+        analysis_result = emotion_service.analyze_emotion(image)
+        saved_result = emotion_service.save_emotion_result(db, current_user.id, analysis_result)
+        session_id = None
+        try:
+            active_session = db.query(AnalysisSession).filter(AnalysisSession.user_id == current_user.id, AnalysisSession.session_end == None).first()
+            if not active_session:
+                active_session = create_session(
+                    db=db,
+                    user_id=current_user.id,
+                    camera_resolution="640x480",
+                    analysis_interval=500
+                )
+            if active_session:
+                new_total = (active_session.total_analyses or 0) + 1
+                new_successful = (active_session.successful_detections or 0) + (1 if analysis_result['faces_detected'] > 0 else 0)
+                new_failed = (active_session.failed_detections or 0) + (1 if analysis_result['faces_detected'] == 0 else 0)
+                new_detection_rate = (new_successful / new_total) * 100 if new_total > 0 else 0
+                update_session(
+                    db=db,
+                    session_id=active_session.id,
+                    total_analyses=new_total,
+                    successful_detections=new_successful,
+                    failed_detections=new_failed,
+                    detection_rate=new_detection_rate,
+                    avg_processing_time=analysis_result['processing_time'],
+                    avg_fps=1000 / analysis_result['processing_time'] if analysis_result['processing_time'] > 0 else 0
+                )
+            session_id = active_session.id if active_session else None
+        except Exception as e:
+            print(f"Session creation error: {e}")
+            session_id = None
+        if analysis_result.get('success', False):
+            return {
+                "success": True,
+                "analysis": {
+                    "dominant_emotion": analysis_result['dominant_emotion'],
+                    "dominant_emotion_vn": analysis_result['dominant_emotion_vn'],
+                    "dominant_emotion_score": analysis_result['dominant_emotion_score'],
+                    "emotions_scores": analysis_result['emotions_scores'],
+                    "emotions_scores_vn": analysis_result['emotions_scores_vn'],
+                    "engagement": analysis_result['engagement'],
+                    "faces_detected": analysis_result['faces_detected'],
+                    "image_quality": analysis_result.get('image_quality', 0.5),
+                    "processing_time": analysis_result['processing_time'],
+                    "confidence_level": analysis_result.get('confidence_level', 0.0)
+                },
+                "saved_result": saved_result,
+                "session_id": session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": analysis_result.get('error', 'Lỗi phân tích cảm xúc'),
+                "faces_detected": analysis_result.get('faces_detected', 0),
+                "processing_time": analysis_result.get('processing_time', 0),
+                "saved_result": saved_result,
+                "session_id": session_id
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi phân tích cảm xúc (realtime): {str(e)}"
         ) 

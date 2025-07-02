@@ -1,8 +1,8 @@
 import { CameraOutlined, PlayCircleOutlined, StopOutlined, ThunderboltOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { Button, Card, Col, message, Progress, Row, Space, Statistic, Typography } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
-import { AnalysisResult } from '../types';
-import { analyzeEmotion, getPerformanceStats, getFaceDetectionStats, startAnalysisSession, endAnalysisSession, getActiveSession } from '../utils/api';
+import { AnalysisResult } from '../types/emotion';
+import { analyzeEmotion, analyzeEmotionRealtime, endAnalysisSession, getActiveSession, getFaceDetectionStats, getPerformanceStats, startAnalysisSession } from '../utils/api';
 
 const { Title, Text } = Typography;
 
@@ -65,6 +65,8 @@ const CameraPage: React.FC = () => {
     average_processing_time: 0,
     average_image_quality: 0
   });
+
+  const [useRealtimeAPI] = useState(true);
 
   // Load performance stats from database
   const loadPerformanceStats = async () => {
@@ -246,8 +248,16 @@ const CameraPage: React.FC = () => {
     ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
     try {
       const canvas = canvasRef.current!;
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-      const data = await analyzeEmotion(imageBase64);
+      let data: AnalysisResult;
+      if (useRealtimeAPI) {
+        // Lấy blob từ canvas và gửi lên API realtime
+        const blob: Blob = await new Promise(resolve => canvas.toBlob(blob => resolve(blob!), 'image/jpeg', 0.8));
+        data = await analyzeEmotionRealtime(blob);
+      } else {
+        // Dùng API cũ (base64)
+        const imageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        data = await analyzeEmotion(imageBase64);
+      }
       setAnalysisResult(data);
       setTotalAnalysisCount(prev => prev + 1);
       if (data.session_id && !currentSessionId) {
