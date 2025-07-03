@@ -3,7 +3,7 @@ import { Button, Card, Col, message, Progress, Row, Space, Statistic, Typography
 import React, { useEffect, useRef, useState } from 'react';
 import { AnalysisResult } from '../types/emotion';
 import { analyzeEmotion, analyzeEmotionRealtime, endAnalysisSession, getActiveSession, getFaceDetectionStats, getPerformanceStats, startAnalysisSession } from '../utils/api';
-import { getEmotionType } from '../utils/emotionUtils';
+import { getEmotionType, getSentimentVN } from '../utils/emotionUtils';
 
 const { Title, Text } = Typography;
 
@@ -37,7 +37,7 @@ const CameraPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamInterval, setStreamInterval] = useState<NodeJS.Timeout | null>(null);
+  const streamIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [savedCount, setSavedCount] = useState(0);
   const [noFaceCount, setNoFaceCount] = useState(0);
   const [totalAnalysisCount, setTotalAnalysisCount] = useState(0);
@@ -71,6 +71,8 @@ const CameraPage: React.FC = () => {
   const [negativeStreak, setNegativeStreak] = useState<number[]>([]);
   const [hasWarned, setHasWarned] = useState(false);
   const alertAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [negativeDuration, setNegativeDuration] = useState(0);
+  const [nonNegativeStreak, setNonNegativeStreak] = useState(0);
 
   // Load performance stats from database
   const loadPerformanceStats = async () => {
@@ -115,8 +117,8 @@ const CameraPage: React.FC = () => {
     
     // Cleanup khi component unmount
     return () => {
-      if (streamInterval) {
-        clearInterval(streamInterval);
+      if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
       }
       if (currentSessionId) {
         endCurrentSession();
@@ -191,9 +193,9 @@ const CameraPage: React.FC = () => {
   };
 
   const stopStreaming = async () => {
-    if (streamInterval) {
-      clearInterval(streamInterval);
-      setStreamInterval(null);
+    if (streamIntervalRef.current) {
+      clearInterval(streamIntervalRef.current);
+      streamIntervalRef.current = null;
     }
     setIsStreaming(false);
     
@@ -215,10 +217,9 @@ const CameraPage: React.FC = () => {
 
     setIsStreaming(true);
     message.success('Bắt đầu stream!');
-    let interval = setInterval(() => {
+    streamIntervalRef.current = setInterval(() => {
       captureFrame();
     }, 200);
-    setStreamInterval(interval);
 
     // Gọi backend tạo session song song, không chờ
     const config = {
@@ -280,18 +281,26 @@ const CameraPage: React.FC = () => {
       const now = Date.now();
       let streak = negativeStreak;
       const dominant = data.analysis?.dominant_emotion;
-      if (dominant && getEmotionType(dominant) === 'negative') {
-        streak = [...streak, now].filter(ts => now - ts <= 1000);
-        setNegativeStreak(streak);
-        if (streak.length >= 5 && !hasWarned) {
-          message.warning('Cảnh báo: Cảm xúc tiêu cực liên tục!');
-          playAlertSound();
-          setHasWarned(true);
-        }
+      const score = data.analysis?.dominant_emotion_score ?? 0;
+      const sentiment = dominant ? getSentimentVN(dominant, score) : '';
+      if (sentiment === 'tiêu cực') {
+        setNonNegativeStreak(0);
+        setNegativeDuration(prev => {
+          const newDuration = prev + 200;
+          if (newDuration > 1000 && !hasWarned) {
+            //message.warning('Cảnh báo: Cảm xúc tiêu cực liên tục!');
+            playAlertSound();
+            setHasWarned(true);
+          }
+          return newDuration;
+        });
       } else {
-        streak = [];
-        setNegativeStreak([]);
         setHasWarned(false);
+        setNonNegativeStreak(prev => {
+          const newStreak = prev + 1;
+          if (newStreak >= 3) setNegativeDuration(0);
+          return newStreak;
+        });
       }
       // --- END CẢNH BÁO ---
       await loadPerformanceStats();
@@ -322,7 +331,7 @@ const CameraPage: React.FC = () => {
     
     // Giảm kích thước canvas
     const canvasWidth = 640;
-    const canvasHeight = 480;
+    const canvasHeight = 580;
     
     ctx.drawImage(videoRef.current, 0, 0, canvasWidth, canvasHeight);
     
@@ -502,6 +511,14 @@ const CameraPage: React.FC = () => {
               >
                 Dừng Stream
               </Button>
+              <Button
+                type="dashed"
+                size="small"
+                onClick={playAlertSound}
+                style={{ marginLeft: 8 }}
+              >
+                Test Cảnh Báo
+              </Button>
             </Space>
           </Card>
         </Col>
@@ -559,7 +576,7 @@ const CameraPage: React.FC = () => {
             {/* Analysis Results - Compact */}
             {analysisResult && analysisResult.analysis && (
               <Card title="Kết quả phân tích" size="small" style={{ flex: 2 }}>
-                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '230px', overflowY: 'auto' }}>
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Row justify="space-between">
                       <Text strong>Cảm xúc chính:</Text>
@@ -568,6 +585,10 @@ const CameraPage: React.FC = () => {
                     <Row justify="space-between">
                       <Text strong>Điểm số:</Text>
                       <Text>{(analysisResult.analysis.dominant_emotion_score * 100).toFixed(1)}%</Text>
+                    </Row>
+                    <Row justify="space-between">
+                      <Text strong>Đánh giá:</Text>
+                      <Text>{getSentimentVN(analysisResult.analysis.dominant_emotion, analysisResult.analysis.dominant_emotion_score)}</Text>
                     </Row>
                     <Row justify="space-between">
                       <Text strong>Tương tác:</Text>
@@ -580,6 +601,10 @@ const CameraPage: React.FC = () => {
                     <Row justify="space-between">
                       <Text strong>Chất lượng ảnh:</Text>
                       <Text>{(analysisResult.analysis.image_quality * 100).toFixed(1)}%</Text>
+                    </Row>
+                    <Row justify="space-between">
+                      <Text strong>Thời gian tiêu cực:</Text>
+                      <Text>{(negativeDuration / 1000).toFixed(1)} giây</Text>
                     </Row>
                   </Space>
                 </div>

@@ -67,4 +67,17 @@ export const emotionStatsToChartData = (emotionStats: { [key: string]: number })
     color: getEmotionColor(emotion),
     type: getEmotionType(emotion)
   }));
-}; 
+};
+
+// Map dominant emotion and score to sentiment string (VN)
+export function getSentimentVN(emotion: string, score: number): string {
+  const type = getEmotionType(emotion);
+  if (type === 'positive') {
+    if (score >= 0.9) return 'rất tích cực';
+    return 'tích cực';
+  }
+  if (type === 'negative') {
+    return 'tiêu cực';
+  }
+  return 'trung tính';
+} 
