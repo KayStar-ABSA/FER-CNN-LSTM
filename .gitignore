@@ -2,7 +2,9 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+demo/models/
+Web/backend/models/
+App/.yarn
 # C extensions
 *.so
 

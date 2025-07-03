@@ -28,14 +28,14 @@ def load_emotion_model():
     """Load model từ file JSON và weights H5"""
     try:
         # Load model structure từ JSON
-        with open('facial_expression_model_structure.json', 'r') as f:
+        with open('models/facial_expression_model_structure.json', 'r') as f:
             model_json = f.read()
         
         # Tạo model từ JSON
         model = model_from_json(model_json)
         
         # Load weights từ H5
-        model.load_weights('facial_expression_model_weights.h5')
+        model.load_weights('models/facial_expression_model_weights.h5')
         
         print("Model loaded successfully from local files")
         return model
@@ -50,7 +50,7 @@ emotion_model = load_emotion_model()
 EMOTIONS = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
 
 # Tải bộ phân loại cascade cho khuôn mặt
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'models/haarcascade_frontalface_default.xml')
 
 # Bắt đầu quay video
 cap = cv2.VideoCapture(0)

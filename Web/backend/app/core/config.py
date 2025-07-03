@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     )
     MODEL_WEIGHTS_PATH: str = os.getenv(
         "MODEL_WEIGHTS_PATH", 
-        "models/facial_expression_model_weights.h5"
+        "models/model_final_cnn_lstm.h5"
     )
     CASCADE_PATH: str = os.getenv(
         "CASCADE_PATH", 
