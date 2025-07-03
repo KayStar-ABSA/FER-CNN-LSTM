@@ -50,7 +50,8 @@ emotion_model = load_emotion_model()
 EMOTIONS = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
 
 # Tải bộ phân loại cascade cho khuôn mặt
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'models/haarcascade_frontalface_default.xml')
+cascade_path = os.path.join(os.path.dirname(__file__), 'models', 'haarcascade_frontalface_default.xml')
+face_cascade = cv2.CascadeClassifier(cascade_path)
 
 # Bắt đầu quay video
 cap = cv2.VideoCapture(0)

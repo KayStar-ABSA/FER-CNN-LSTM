@@ -3,6 +3,7 @@ import { Button, Card, Col, message, Progress, Row, Space, Statistic, Typography
 import React, { useEffect, useRef, useState } from 'react';
 import { AnalysisResult } from '../types/emotion';
 import { analyzeEmotion, analyzeEmotionRealtime, endAnalysisSession, getActiveSession, getFaceDetectionStats, getPerformanceStats, startAnalysisSession } from '../utils/api';
+import { getEmotionType } from '../utils/emotionUtils';
 
 const { Title, Text } = Typography;
 
@@ -67,6 +68,9 @@ const CameraPage: React.FC = () => {
   });
 
   const [useRealtimeAPI] = useState(true);
+  const [negativeStreak, setNegativeStreak] = useState<number[]>([]);
+  const [hasWarned, setHasWarned] = useState(false);
+  const alertAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load performance stats from database
   const loadPerformanceStats = async () => {
@@ -208,31 +212,40 @@ const CameraPage: React.FC = () => {
       message.warning('Đang stream rồi!');
       return;
     }
-    
-    // Tạo session mới khi bắt đầu stream với JSON config
-    try {
-      const config = {
-        cameraResolution: cameraResolution,
-        analysisInterval: 200,
-        detectionThreshold: 0.8,
-        enabledEmotions: ['happy', 'sad', 'angry', 'neutral', 'surprise', 'fear', 'disgust'],
-        maxSessionDuration: 3600
-      };
-      
-      const sessionResult = await startAnalysisSession(config);
-      if (sessionResult.success) {
-        setCurrentSessionId(sessionResult.session.id);
-      }
-    } catch (error) {
-      console.error('Error creating session:', error);
-    }
-    
+
     setIsStreaming(true);
     message.success('Bắt đầu stream!');
     let interval = setInterval(() => {
       captureFrame();
     }, 200);
     setStreamInterval(interval);
+
+    // Gọi backend tạo session song song, không chờ
+    const config = {
+      cameraResolution: cameraResolution,
+      analysisInterval: 200,
+      detectionThreshold: 0.8,
+      enabledEmotions: ['happy', 'sad', 'angry', 'neutral', 'surprise', 'fear', 'disgust'],
+      maxSessionDuration: 3600
+    };
+    startAnalysisSession(config)
+      .then(sessionResult => {
+        if (sessionResult.success) {
+          setCurrentSessionId(sessionResult.session.id);
+        }
+      })
+      .catch(error => {
+        console.error('Error creating session:', error);
+      });
+  };
+
+  // Hàm phát âm thanh cảnh báo
+  const playAlertSound = () => {
+    if (!alertAudioRef.current) {
+      alertAudioRef.current = new window.Audio('/alert-beep.mp3');
+    }
+    alertAudioRef.current.currentTime = 0;
+    alertAudioRef.current.play();
   };
 
   const captureFrame = async () => {
@@ -263,25 +276,36 @@ const CameraPage: React.FC = () => {
       if (data.session_id && !currentSessionId) {
         setCurrentSessionId(data.session_id);
       }
-      
-      // Refresh thống kê từ database sau mỗi lần phân tích
+      // --- CẢNH BÁO CẢM XÚC NGUY HIỂM ---
+      const now = Date.now();
+      let streak = negativeStreak;
+      const dominant = data.analysis?.dominant_emotion;
+      if (dominant && getEmotionType(dominant) === 'negative') {
+        streak = [...streak, now].filter(ts => now - ts <= 1000);
+        setNegativeStreak(streak);
+        if (streak.length >= 5 && !hasWarned) {
+          message.warning('Cảnh báo: Cảm xúc tiêu cực liên tục!');
+          playAlertSound();
+          setHasWarned(true);
+        }
+      } else {
+        streak = [];
+        setNegativeStreak([]);
+        setHasWarned(false);
+      }
+      // --- END CẢNH BÁO ---
       await loadPerformanceStats();
-      
-      // Đếm số kết quả đã lưu
       if (data.analysis?.faces_detected && data.analysis.faces_detected > 0) {
         setSavedCount(prev => prev + data.analysis!.faces_detected);
-        // Hiển thị thông báo thỉnh thoảng
-        if (Math.random() < 0.05) { // 5% chance
+        if (Math.random() < 0.05) {
           message.success(`Phát hiện ${data.analysis.faces_detected} khuôn mặt! (${data.analysis.processing_time}ms)`, 1);
         }
       } else {
         setNoFaceCount(prev => prev + 1);
-        // Hiển thị gợi ý thỉnh thoảng
-        if (Math.random() < 0.1) { // 10% chance
+        if (Math.random() < 0.1) {
           message.info('Không phát hiện khuôn mặt. Hãy đảm bảo khuôn mặt rõ ràng và đủ ánh sáng.', 2);
         }
       }
-      
     } catch (error) {
       console.error('Lỗi khi gọi API analyzeEmotion:', error);
     }
